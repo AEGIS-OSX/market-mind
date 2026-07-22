@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 
 /**
  * Market Mind Portfolio Page
@@ -112,19 +111,19 @@ export default function PortfolioPage() {
       <section className="flex-1 overflow-auto">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-bottom border-[var(--color-border)]">
+            <tr>
               {[
                 "Ticker",
                 "Position",
                 "Avg Price",
                 "Current Price",
-                "Market Value",
+                "Value",
                 "P&L",
                 "P&L %",
               ].map((header) => (
                 <th 
                   key={header}
-                  className="px-[12px] py-[8px] text-[var(--text-xs)] font-normal uppercase tracking-[0.08em] text-[var(--color-text-secondary)] border-b border-[var(--color-border)]"
+                  className="px-[12px] py-[8px] text-[11px] font-normal uppercase tracking-[0.08em] text-[var(--color-text-secondary)] border-b border-[var(--color-border)]"
                 >
                   {header}
                 </th>
@@ -148,10 +147,8 @@ export default function PortfolioPage() {
               </tr>
             ) : (
               positions.map((pos) => (
-                <motion.tr 
+                <tr 
                   key={pos.ticker}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
                   className="h-[44px] border-b border-[var(--color-border)] hover:bg-[var(--color-surface-2)] transition-colors cursor-default"
                 >
                   <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-ticker)] font-medium text-[var(--color-text-primary)]">
@@ -191,7 +188,7 @@ export default function PortfolioPage() {
                   >
                     {pos.pnlPercent > 0 ? "+" : ""}{pos.pnlPercent.toFixed(2)}%
                   </td>
-                </motion.tr>
+                </tr>
               ))
             )}
           </tbody>
