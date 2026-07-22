@@ -155,7 +155,7 @@ export default function SettingsPage() {
               value={cap}
               onChange={(e) => setCap(e.target.value)}
               placeholder="$0.00"
-              className="h-[44px] w-full bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] px-[16px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-2 focus:outline-[var(--color-accent)] transition-all font-[family-name:var(--font-body)]"
+              className="h-[44px] w-full bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] px-[16px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline focus:outline-2 focus:outline-[var(--color-accent)] transition-all font-[family-name:var(--font-body)]"
             />
           </div>
         </section>
