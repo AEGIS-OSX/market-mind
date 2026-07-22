@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 /**
  * Market Mind - Signals Feed Page
@@ -16,6 +16,8 @@ interface Signal {
   timestamp: string;
   rationale: string;
 }
+
+const SHOW_EMPTY = false; // Toggle true for QC to verify AC3 (empty state)
 
 const MOCK_SIGNALS: Signal[] = [
   {
@@ -61,6 +63,7 @@ const StatusBadge = ({ variant, label }: { variant: "buy" | "sell" | "hold"; lab
 export default function SignalsPage() {
   const [selectedSignalId, setSelectedSignalId] = useState<string | null>(null);
   const [executionMode] = useState<"Auto-trade" | "Recommend only">("Recommend only");
+  const shouldReduce = useReducedMotion();
 
   const selectedSignal = useMemo(
     () => MOCK_SIGNALS.find((s) => s.id === selectedSignalId),
@@ -99,7 +102,7 @@ export default function SignalsPage() {
       <main className="flex flex-1 overflow-hidden">
         {/* Signals List */}
         <section className="flex-1 overflow-y-auto p-6 space-y-3">
-          {MOCK_SIGNALS.length === 0 ? (
+          {SHOW_EMPTY || MOCK_SIGNALS.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full space-y-4">
               <svg
                 width="48"
@@ -124,8 +127,7 @@ export default function SignalsPage() {
               <article
                 key={signal.id}
                 tabIndex={0}
-                role="button"
-                aria-pressed={selectedSignalId === signal.id}
+                aria-label={`${signal.ticker} ${signal.action} signal, confidence ${signal.confidence}%. Press Enter or Space to open rationale panel.`}
                 onClick={() => setSelectedSignalId(signal.id)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -177,10 +179,10 @@ export default function SignalsPage() {
         <AnimatePresence>
           {selectedSignal && (
             <motion.aside
-              initial={{ x: 320 }}
+              initial={{ x: shouldReduce ? 0 : 320 }}
               animate={{ x: 0 }}
-              exit={{ x: 320 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
+              exit={{ x: shouldReduce ? 0 : 320 }}
+              transition={{ duration: shouldReduce ? 0 : 0.2, ease: "easeOut" }}
               className="w-[320px] bg-[var(--color-surface-1)] border-l border-[var(--color-border)] flex flex-col"
             >
               <div className="p-6 border-b border-[var(--color-border)] flex items-center justify-between">
