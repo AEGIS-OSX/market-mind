@@ -138,7 +138,7 @@ export default function Sidebar() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsOpen(false)}
-            className="md:hidden fixed inset-0 bg-[rgba(13,15,20,0.8)] z-40"
+            className="md:hidden fixed inset-0 bg-[color-mix(in_srgb,var(--color-canvas)_80%,transparent)] z-40"
           />
         )}
       </AnimatePresence>
