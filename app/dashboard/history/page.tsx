@@ -99,9 +99,9 @@ export default function TradeHistoryPage() {
   };
 
   return (
-    <div className="flex flex-col w-full min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)]">
+    <div className="flex flex-col w-full min-h-screen bg-[var(--color-canvas)] text-[var(--color-text-primary)]">
       {/* Top Bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-bottom border-[var(--color-border)]">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
         <h1 className="text-[18px] font-medium tracking-tight">Trade History</h1>
         <div className="flex gap-3">
           <button className="action-button">Export CSV</button>
