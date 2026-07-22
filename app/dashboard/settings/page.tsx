@@ -62,31 +62,24 @@ const Modal = ({ isOpen, onClose, title, children, confirmLabel, onConfirm, isDe
 export default function SettingsPage() {
   const [risk, setRisk] = useState<RiskLevel>("Moderate");
   const [cap, setCap] = useState("");
-  const [capError, setCapError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [modal, setModal] = useState<"connect" | "disconnect" | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [capError, setCapError] = useState<string>("");
   const [initialState, setInitialState] = useState({ risk: "Moderate", cap: "", isConnected: false });
 
   const isDirty = risk !== initialState.risk || cap !== initialState.cap || isConnected !== initialState.isConnected;
 
-  const validateCap = (value: string): string | null => {
-    if (value === "" || value === "$") return null;
-    const numeric = parseFloat(value.replace(/[$,]/g, ""));
-    if (isNaN(numeric)) return "Enter a valid dollar amount (e.g. $5000.00)";
-    if (numeric < 0) return "Investment cap cannot be negative";
-    if (numeric > 10_000_000) return "Investment cap cannot exceed $10,000,000";
-    return null;
-  };
-
   const handleSave = () => {
     if (!isDirty) return;
-    const err = validateCap(cap);
-    if (err) {
-      setCapError(err);
-      return;
+    if (cap !== "") {
+      const numericCap = parseFloat(cap);
+      if (isNaN(numericCap) || numericCap < 0 || numericCap > 10000000) {
+        setCapError("Please enter a valid investment cap between $0 and $10,000,000.");
+        return;
+      }
     }
-    setCapError(null);
+    setCapError("");
     setInitialState({ risk, cap, isConnected });
     setShowToast(true);
   };
@@ -167,22 +160,30 @@ export default function SettingsPage() {
               Investment Cap
             </label>
             <input
-              type="text"
+              type="number"
+              min="0"
+              max="10000000"
+              step="0.01"
+              inputMode="decimal"
               value={cap}
               onChange={(e) => {
-                const raw = e.target.value;
-                const stripped = raw.replace(/[^0-9$.,]/g, "");
-                setCap(stripped);
-                setCapError(null);
+                const val = e.target.value;
+                if (val === "") {
+                  setCap("");
+                  setCapError("");
+                  return;
+                }
+                const numericVal = parseFloat(val);
+                if (!isNaN(numericVal) && numericVal >= 0 && numericVal <= 10000000) {
+                  setCap(val);
+                  setCapError("");
+                }
               }}
               placeholder="$0.00"
-              inputMode="decimal"
-              autoComplete="off"
-              maxLength={15}
               className="h-[44px] w-full bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] px-[16px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline focus:outline-2 focus:outline-[var(--color-accent)] transition-all font-[family-name:var(--font-body)]"
             />
             {capError && (
-              <p role="alert" className="text-[var(--text-xs)] text-[var(--color-loss)] mt-[4px]">
+              <p role="alert" className="text-red-500 text-sm mt-1">
                 {capError}
               </p>
             )}
