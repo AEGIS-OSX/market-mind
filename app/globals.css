@@ -5,26 +5,92 @@
 @tailwind utilities;
 
 :root {
+  /* Color Palette */
+  --color-canvas: #0D0F14;
+  --color-surface-1: #141720;
+  --color-surface-2: #1C2030;
+  --color-surface-3: #10121A;
+  --color-border: #252A38;
+  --color-accent: #00C9A7;
+  --color-accent-ink: #0D0F14;
+  --color-gain: #22C55E;
+  --color-loss: #EF4444;
+  --color-alert: #F59E0B;
+  --color-text-primary: #F1F5F9;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #6B7280;
   --color-primary: #F1F5F9;
   --color-accent: #00C9A7;
   --color-bg: #0D0F14;
   --color-text: #F1F5F9;
   --color-muted: #6B7280;
-  --color-border: #252A38;
+
+  /* Typography */
+  --font-display: 'Söhne', 'Geist Sans', sans-serif;
+  --font-body: 'Berkeley Mono', 'IBM Plex Mono', monospace;
+
+  /* Spacing Scale (8px base) */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 48px;
+  --space-7: 56px;
+  --space-8: 64px;
+  --space-9: 72px;
+  --space-10: 80px;
+  --space-11: 88px;
+  --space-12: 96px;
   --space-base: 8px;
+
+  /* Radii */
+  --radius-panel: 4px;
+  --radius-button: 6px;
+  --radius-modal: 8px;
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 16px;
-  --font-display: 'Inter', Georgia, serif;
-  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Type Scale */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-ticker: 14px;
+  --text-rationale: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-section-title: 22px;
+  --text-2xl: 24px;
+  --text-3xl: 28px;
+  --text-4xl: 32px;
+  --text-5xl: 40px;
+  --text-metric: 48px;
+
+  /* Motion */
+  --duration-fast: 200ms;
+  --duration-flash: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html, body {
-  background: var(--color-bg);
-  color: var(--color-text);
+  background-color: var(--color-canvas);
+  color: var(--color-text-primary);
   font-family: var(--font-body);
+  overflow-x: clip;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
 }
