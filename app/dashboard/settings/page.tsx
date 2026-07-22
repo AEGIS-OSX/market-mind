@@ -41,7 +41,7 @@ const Modal = ({ isOpen, onClose, title, children, confirmLabel, onConfirm, isDe
             onClick={onConfirm}
             className={`h-[44px] w-full rounded-[var(--radius-button)] font-[500] transition-opacity hover:opacity-90 ${
               isDestructive
-                ? "bg-[var(--color-loss)] text-[var(--color-text-primary)]"
+                ? "bg-[var(--color-surface-3)] text-[var(--color-loss)]"
                 : "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
             }`}
           >
@@ -155,7 +155,7 @@ export default function SettingsPage() {
               value={cap}
               onChange={(e) => setCap(e.target.value)}
               placeholder="$0.00"
-              className="h-[44px] w-full bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] px-[16px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] transition-all font-[family-name:var(--font-body)]"
+              className="h-[44px] w-full bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] px-[16px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-2 focus:outline-[var(--color-accent)] transition-all font-[family-name:var(--font-body)]"
             />
           </div>
         </section>
@@ -216,7 +216,7 @@ export default function SettingsPage() {
             confirmLabel="Continue to Alpaca"
             onConfirm={handleConnect}
           >
-            Market Mind requires read and write access to your Alpaca brokerage account to execute trades on your behalf.
+            Market Mind requires a connected Alpaca account to execute trades. Your credentials are encrypted and never exposed.
           </Modal>
         )}
         {modal === "disconnect" && (
@@ -224,11 +224,11 @@ export default function SettingsPage() {
             isOpen={true}
             onClose={() => setModal(null)}
             title="Disconnect Brokerage"
-            confirmLabel="Confirm Disconnect"
+            confirmLabel="Disconnect Account"
             onConfirm={handleDisconnect}
             isDestructive
           >
-            This will stop all automated trading immediately. Any open positions will remain open.
+            This will stop all automated trading and remove access to your Alpaca account.
           </Modal>
         )}
       </AnimatePresence>
