@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 /**
  * DESIGN TOKENS REFERENCE (from globals.css):
@@ -71,7 +71,7 @@ const MetricCard = ({ label, value, delta, deltaType, loading }: MetricCardProps
             color: isFlashing ? flashColor : "var(--color-text-primary)",
           }}
           transition={{ duration: 0.3 }}
-          className="text-[32px] font-[family-name:var(--font-display)] font-semibold leading-tight"
+          className="text-[48px] font-[family-name:var(--font-display)] font-semibold leading-[1.1]"
         >
           {value}
         </motion.span>
@@ -114,7 +114,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Metrics Grid */}
-      <section className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="p-6 grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
           label="Portfolio Value"
           value="$24,831.50"
