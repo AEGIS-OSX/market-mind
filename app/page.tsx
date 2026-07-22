@@ -1,3 +1,5 @@
+"use client";
+
 import DashboardLayout from "@/app/dashboard/layout";
 import Sidebar from "@/components/ui/sidebar";
 import StatusBadge from "@/components/ui/status-badge";
@@ -12,7 +14,7 @@ import SettingsPage from "@/app/dashboard/settings/page";
 
 export default function Home() {
   return (
-    <main className="flex flex-col min-h-screen">
+    <main>
       <DashboardLayout>
         <Sidebar />
         <StatusBadge />
