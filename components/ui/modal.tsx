@@ -52,7 +52,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-[rgba(13,15,20,0.85)]"
+            className="fixed inset-0 bg-[color-mix(in_srgb,var(--color-canvas)_85%,transparent)]"
             aria-hidden="true"
           />
           <motion.div
