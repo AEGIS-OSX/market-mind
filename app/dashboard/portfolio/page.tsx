@@ -1,102 +1,102 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
-export default async function PortfolioPage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+interface Position {
+  ticker: string
+  quantity: number
+  avgPrice: number
+  currentPrice: number
+  marketValue: number
+  pnl: number
+  pnlPercent: number
+}
 
+const EmptyState = () => (
+  <div className="flex flex-col items-center justify-center py-[var(--space-6)] text-center">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-[var(--space-2)]">
+      <path d="M3 3v18h18" />
+      <path d="m19 9-5 5-4-4-3 3" />
+    </svg>
+    <p className="font-[family-name:var(--font-display)] text-[16px] font-medium text-[var(--color-text-secondary)]">
+      No active positions.
+    </p>
+  </div>
+)
+
+export default async function PortfolioPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     redirect('/login')
   }
 
-  const { data: positions } = await supabase
+  const { data: dbPositions } = await supabase
     .from('positions')
     .select('*')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
 
-  const totalValue = (positions ?? []).reduce(
-    (sum, p) => sum + (p.quantity || 0) * (p.current_price || p.avg_cost || 0),
-    0
-  )
-
-  const totalCost = (positions ?? []).reduce(
-    (sum, p) => sum + (p.quantity || 0) * (p.avg_cost || 0),
-    0
-  )
-
-  const totalReturn = totalValue - totalCost
-  const totalReturnPercent = totalCost > 0 ? (totalReturn / totalCost) * 100 : 0
+  const positions: Position[] = (dbPositions || []).map((pos) => {
+    const currentPrice = pos.current_price || pos.avg_cost
+    const marketValue = pos.quantity * currentPrice
+    const costBasis = pos.quantity * pos.avg_cost
+    const pnl = marketValue - costBasis
+    const pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0
+    return {
+      ticker: pos.symbol,
+      quantity: pos.quantity,
+      avgPrice: pos.avg_cost,
+      currentPrice,
+      marketValue,
+      pnl,
+      pnlPercent,
+    }
+  })
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-sm font-medium text-gray-500">Total Value</h3>
-          <p className="text-2xl font-bold mt-2">
-            ${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-sm font-medium text-gray-500">Total Return</h3>
-          <p className={`text-2xl font-bold mt-2 ${totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {totalReturn >= 0 ? '+' : ''}
-            ${totalReturn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-sm font-medium text-gray-500">Return %</h3>
-          <p className={`text-2xl font-bold mt-2 ${totalReturnPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {totalReturnPercent >= 0 ? '+' : ''}
-            {totalReturnPercent.toFixed(2)}%
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold">Positions</h2>
-        </div>
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+    <main className="flex flex-col w-full min-h-screen bg-[var(--color-canvas)]">
+      <header className="flex items-center h-[64px] px-[var(--space-3)] border-b border-[var(--color-border)]">
+        <h1 className="font-[family-name:var(--font-display)] text-[var(--text-section-title)] font-medium text-[var(--color-text-primary)]">
+          Portfolio
+        </h1>
+      </header>
+      <section className="flex-1 overflow-auto">
+        <table className="w-full border-collapse text-left">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Cost</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Price</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Value</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Return</th>
+              {['Ticker', 'Position', 'Avg Price', 'Current Price', 'Value', 'P&L', 'P&L %'].map((header) => (
+                <th key={header} className="px-[12px] py-[8px] text-[11px] font-normal uppercase tracking-[0.08em] text-[var(--color-text-secondary)] border-b border-[var(--color-border)]">
+                  {header}
+                </th>
+              ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {(positions ?? []).length === 0 && (
+          <tbody>
+            {positions.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                  No positions yet. Trades will appear here after execution.
+                <td colSpan={7} className="p-0">
+                  <EmptyState />
                 </td>
               </tr>
-            )}
-            {(positions ?? []).map((position) => {
-              const marketValue = (position.quantity || 0) * (position.current_price || position.avg_cost || 0)
-              const cost = (position.quantity || 0) * (position.avg_cost || 0)
-              const ret = marketValue - cost
-              const retPercent = cost > 0 ? (ret / cost) * 100 : 0
-              return (
-                <tr key={position.id}>
-                  <td className="px-6 py-4 whitespace-nowrap font-medium">{position.symbol}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{position.quantity}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">${(position.avg_cost || 0).toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">${(position.current_price || position.avg_cost || 0).toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">${marketValue.toFixed(2)}</td>
-                  <td className={`px-6 py-4 whitespace-nowrap ${ret >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {ret >= 0 ? '+' : ''}${ret.toFixed(2)} ({retPercent.toFixed(2)}%)
+            ) : (
+              positions.map((pos) => (
+                <tr key={pos.ticker} className="h-[44px] border-b border-[var(--color-border)] hover:bg-[var(--color-surface-2)] transition-colors cursor-default">
+                  <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-ticker)] font-medium text-[var(--color-text-primary)]">{pos.ticker}</td>
+                  <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] [font-feature-settings:'tnum'] text-[var(--color-text-primary)]">{pos.quantity}</td>
+                  <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] [font-feature-settings:'tnum'] text-[var(--color-text-primary)]">${pos.avgPrice.toFixed(2)}</td>
+                  <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] [font-feature-settings:'tnum'] text-[var(--color-text-primary)]">${pos.currentPrice.toFixed(2)}</td>
+                  <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] [font-feature-settings:'tnum'] text-[var(--color-text-primary)]">${pos.marketValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td className={`px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] [font-feature-settings:'tnum'] ${pos.pnl > 0 ? 'text-[var(--color-gain)]' : pos.pnl < 0 ? 'text-[var(--color-loss)]' : 'text-[var(--color-text-muted)]'}`}>
+                    {pos.pnl > 0 ? '+' : ''}{pos.pnl.toFixed(2)}
+                  </td>
+                  <td className={`px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] [font-feature-settings:'tnum'] ${pos.pnlPercent > 0 ? 'text-[var(--color-gain)]' : pos.pnlPercent < 0 ? 'text-[var(--color-loss)]' : 'text-[var(--color-text-muted)]'}`}>
+                    {pos.pnlPercent > 0 ? '+' : ''}{pos.pnlPercent.toFixed(2)}%
                   </td>
                 </tr>
-              )
-            })}
+              ))
+            )}
           </tbody>
         </table>
-      </div>
-    </div>
+      </section>
+    </main>
   )
 }

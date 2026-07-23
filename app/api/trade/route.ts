@@ -1,55 +1,53 @@
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
 
-export async function POST(request: Request) {
-  const supabase = createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-  if (!user || authError) {
+export async function POST(request: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => null)
-  if (!body || !body.symbol || !body.side || !body.quantity) {
-    return NextResponse.json(
-      { error: 'Missing required fields: symbol, side, quantity' },
-      { status: 400 }
-    )
+  let body: { symbol?: string; side?: string; quantity?: number }
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
   const { symbol, side, quantity } = body
-  const validSides = ['buy', 'sell']
-  if (!validSides.includes(side)) {
+  if (
+    !symbol || typeof symbol !== 'string' ||
+    !side || !['buy', 'sell'].includes(side) ||
+    !quantity || typeof quantity !== 'number' || quantity <= 0
+  ) {
     return NextResponse.json(
-      { error: 'Invalid side. Must be buy or sell' },
-      { status: 400 }
-    )
-  }
-  if (typeof quantity !== 'number' || quantity <= 0 || !Number.isFinite(quantity)) {
-    return NextResponse.json(
-      { error: 'Invalid quantity' },
+      { error: 'Missing or invalid fields: symbol, side, quantity required' },
       { status: 400 }
     )
   }
 
-  // Record trade intent in DB scoped to authenticated user
-  const { error: dbError } = await supabase
-    .from('trades')
-    .insert({
-      user_id: user.id,
-      symbol: symbol.toUpperCase(),
+  const { error } = await supabase.from('trades').insert({
+    user_id: user.id,
+    symbol,
+    side,
+    quantity,
+    price: 0,
+    executed_at: new Date().toISOString(),
+  })
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    success: true,
+    order: {
+      symbol,
       side,
       quantity,
-      price: 0, // Will be filled by Alpaca execution
+      user_id: user.id,
       executed_at: new Date().toISOString(),
-    })
-
-  if (dbError) {
-    return NextResponse.json(
-      { error: 'Database error' },
-      { status: 500 }
-    )
-  }
-
-  return NextResponse.json({ success: true, message: 'Trade order queued' })
+    },
+  })
 }
