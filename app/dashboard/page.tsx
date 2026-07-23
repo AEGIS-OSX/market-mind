@@ -87,14 +87,59 @@ const MetricCard = ({ label, value, delta, deltaType, loading }: MetricCardProps
 
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
-  const [executionMode, setExecutionMode] = useState<"auto" | "recommend">("auto");
+  const [executionMode, setExecutionMode] = useState<"auto" | "recommend" | null>(null);
   const [marketOpen, setMarketOpen] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  // Mock loading state
+  // Fetch settings from server on mount
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 1000);
-    return () => clearTimeout(timer);
+    async function loadSettings() {
+      try {
+        const response = await fetch("/api/user/settings");
+        if (!response.ok) {
+          throw new Error("Failed to load settings");
+        }
+        const data = await response.json();
+        setExecutionMode(data.execution_mode);
+      } catch {
+        setError("Failed to load execution mode. Please refresh the page.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadSettings();
   }, []);
+
+  async function handleModeChange(newMode: "auto" | "recommend") {
+    if (isUpdating || executionMode === null) return;
+    if (executionMode === newMode) return;
+
+    const previousMode = executionMode;
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/user/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ execution_mode: newMode }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update execution mode");
+      }
+
+      const data = await response.json();
+      setExecutionMode(data.execution_mode);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update execution mode");
+      setExecutionMode(previousMode);
+    } finally {
+      setIsUpdating(false);
+    }
+  }
 
   return (
     <main className="flex-1 flex flex-col min-h-screen bg-[var(--color-canvas)]">
@@ -144,14 +189,20 @@ export default function DashboardPage() {
 
       {/* Controls Section */}
       <section className="px-6 pb-6 space-y-4">
+        {error && (
+          <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-loss)]/10 border border-[var(--color-loss)]/20 text-[var(--color-loss)] text-[13px] font-[family-name:var(--font-body)]">
+            {error}
+          </div>
+        )}
+
         <div className="flex flex-col gap-3">
           <label className="text-[13px] font-[family-name:var(--font-body)] text-[var(--color-text-secondary)]">
             Execution Mode
           </label>
           <div className="flex gap-2">
             <button
-              onClick={() => setExecutionMode("auto")}
-              disabled={isLoading}
+              onClick={() => handleModeChange("auto")}
+              disabled={isLoading || isUpdating}
               className={`h-9 px-4 rounded-[var(--radius-button)] text-[13px] font-medium transition-all duration-[var(--duration-fast)] ease-[var(--ease-out)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:ring-offset-2 focus:ring-offset-[var(--color-canvas)] disabled:opacity-50 disabled:cursor-not-allowed ${
                 executionMode === "auto"
                   ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
@@ -161,8 +212,8 @@ export default function DashboardPage() {
               Auto-trade
             </button>
             <button
-              onClick={() => setExecutionMode("recommend")}
-              disabled={isLoading}
+              onClick={() => handleModeChange("recommend")}
+              disabled={isLoading || isUpdating}
               className={`h-9 px-4 rounded-[var(--radius-button)] text-[13px] font-medium transition-all duration-[var(--duration-fast)] ease-[var(--ease-out)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:ring-offset-2 focus:ring-offset-[var(--color-canvas)] disabled:opacity-50 disabled:cursor-not-allowed ${
                 executionMode === "recommend"
                   ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
