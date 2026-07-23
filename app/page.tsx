@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Ease curve matching var(--ease-out): cubic-bezier(0.16, 1, 0.3, 1)
-// FIX: All motion transitions now use this curve instead of default linear.
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
 const NAV_ITEMS = [
@@ -20,30 +19,22 @@ type NavLabel = (typeof NAV_ITEMS)[number]["label"];
 const RISK_TIERS = ["Conservative", "Moderate", "Aggressive"] as const;
 type RiskTier = (typeof RISK_TIERS)[number];
 
-// Section 5 — Portfolio & Holdings Table headers (unchanged from spec)
 const PORTFOLIO_HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "P&L", "Value"];
 
-// FIX: Section 6 — Trade History headers now include "Status" and "Rationale" per Quinn's spec.
 const HISTORY_HEADERS = ["Date", "Ticker", "Action", "Quantity", "Price", "Status", "Rationale"];
 
 export default function Home() {
   const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
   const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
   const [contextOpen, setContextOpen] = useState(true);
-  // FIX: Default to $10,000.00 instead of empty string so trading is not blocked.
   const [investmentCap, setInvestmentCap] = useState("10000");
-  // Brokerage connection state — drives "Alpaca Connected" / "Brokerage Required" copy.
   const [brokerageConnected, setBrokerageConnected] = useState(false);
-  // FIX: Active nav is now real component state. Clicking a nav button sets this;
-  // the header title and section visibility derive from it. No hash is ever written to the URL.
+  // FIX: Active nav is real component state. Clicking a nav button sets this;
+  // header title and section visibility derive from it. No hash is written to the URL.
   const [activeNav, setActiveNav] = useState<NavLabel>("Dashboard");
 
-  // In production this derives from a real-time market clock.
-  // Defaulting to closed so the UI shows a safe initial state.
   const marketOpen = false;
 
-  // FIX: Section visibility derived from activeNav. "Dashboard" shows the full overview;
-  // each specific tab isolates its own section so the visible content actually changes on click.
   const showSignals = activeNav === "Dashboard" || activeNav === "Signals";
   const showPortfolio = activeNav === "Dashboard" || activeNav === "Portfolio";
   const showHistory = activeNav === "Dashboard" || activeNav === "Trade History";
@@ -51,16 +42,13 @@ export default function Home() {
   const showMetrics = activeNav === "Dashboard" || activeNav === "Portfolio";
 
   return (
-    // FIX: Pure flex-row layout. Sidebar is a flex child, NOT absolute/fixed positioned.
-    // min-w-0 on main prevents flex overflow from clipping the hero metric card.
     <div className="flex flex-row h-screen overflow-hidden bg-[var(--color-canvas)] text-[var(--color-text-primary)]">
 
-      {/* ── Sidebar 240px fixed-width flex child ── */}
+      {/* Sidebar */}
       <aside
         className="w-[240px] flex-shrink-0 bg-[var(--color-surface-1)] border-r border-[var(--color-border)] flex flex-col"
         aria-label="Primary navigation"
       >
-        {/* Logo */}
         <div className="px-[16px] py-[20px] border-b border-[var(--color-border)]">
           <div className="flex items-center gap-[10px]">
             <div
@@ -84,10 +72,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Nav */}
-        {/* FIX: Tab triggers are now <button type="button"> with an onClick that sets activeNav.
-            Previously these were <a href="#"> with no handler, which appended /# to the URL and
-            changed no state. Buttons are natively keyboard-operable (Enter/Space) and focusable. */}
+        {/* Nav: tab triggers are <button type="button"> wired to setActiveNav. */}
         <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
           {NAV_ITEMS.map((item) => {
             const isActive = activeNav === item.label;
@@ -114,10 +99,8 @@ export default function Home() {
           })}
         </nav>
 
-        {/* Divider */}
         <div className="mx-[16px] border-t border-[var(--color-border)]" />
 
-        {/* Risk Tolerance */}
         <div className="px-[16px] py-[16px] flex flex-col gap-[8px]">
           <label
             className="font-[family-name:var(--font-body)]"
@@ -131,7 +114,6 @@ export default function Home() {
                 key={tier}
                 type="button"
                 onClick={() => setRiskTier(tier)}
-                // FIX: border-radius uses var(--radius-button) = 6px, not 4px.
                 style={{
                   borderRadius: "var(--radius-button)",
                   fontSize: "var(--text-sm)",
@@ -151,7 +133,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Investment Cap */}
         <div className="px-[16px] pb-[16px] flex flex-col gap-[8px]">
           <label
             htmlFor="investment-cap"
@@ -194,10 +175,8 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Divider */}
         <div className="mx-[16px] border-t border-[var(--color-border)]" />
 
-        {/* FIX: Brokerage Status — "Alpaca Connected" or "Brokerage Required" per Quinn's spec. */}
         <div className="px-[16px] py-[16px]">
           <button
             type="button"
@@ -223,10 +202,8 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* FIX: Market Status — "NASDAQ Open" / "NASDAQ Closed" using marketOpen boolean. */}
         <div className="px-[16px] py-[16px] border-t border-[var(--color-border)]">
           <div className="flex items-center gap-[8px]">
             <span
@@ -244,12 +221,10 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* ── Main content — flex-1 min-w-0 prevents hero metric from being clipped ── */}
+      {/* Main content */}
       <main className="flex-1 min-w-0 overflow-auto flex flex-col" aria-label="Dashboard">
 
-        {/* Header bar */}
         <header className="flex items-center justify-between px-[24px] py-[16px] border-b border-[var(--color-border)] flex-shrink-0">
-          {/* FIX: Header title reflects the active nav so the view change is visible. */}
           <h1
             className="font-[family-name:var(--font-display)]"
             style={{ fontSize: "var(--text-xl)", fontWeight: 500, color: "var(--color-text-primary)" }}
@@ -257,7 +232,6 @@ export default function Home() {
             {activeNav}
           </h1>
           <div className="flex items-center gap-[12px]">
-            {/* Execution mode toggle */}
             <div
               className="flex items-center gap-[2px] p-[2px]"
               style={{ borderRadius: "var(--radius-button)", backgroundColor: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}
@@ -303,17 +277,14 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ── Hero Metrics ── */}
         {showMetrics && (
         <motion.section
           className="px-[24px] py-[24px] grid grid-cols-4 gap-[16px] flex-shrink-0"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          // FIX: ease-out cubic-bezier applied to all motion transitions.
           transition={{ duration: 0.4, ease: EASE_OUT }}
           aria-label="Portfolio metrics"
         >
-          {/* Portfolio Value — primary metric */}
           <div
             className="col-span-1 flex flex-col gap-[8px] p-[20px]"
             style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
@@ -324,7 +295,6 @@ export default function Home() {
             >
               Portfolio Value
             </span>
-            {/* FIX: font-weight 600 (Söhne Kräftig) applied to hero metric value. */}
             <span
               className="font-[family-name:var(--font-display)]"
               style={{ fontSize: "var(--text-metric)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
@@ -333,7 +303,6 @@ export default function Home() {
             </span>
           </div>
 
-          {/* Open P&L */}
           <div
             className="flex flex-col gap-[8px] p-[20px]"
             style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
@@ -352,7 +321,6 @@ export default function Home() {
             </span>
           </div>
 
-          {/* Closed P&L */}
           <div
             className="flex flex-col gap-[8px] p-[20px]"
             style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
@@ -371,7 +339,6 @@ export default function Home() {
             </span>
           </div>
 
-          {/* Total Return */}
           <div
             className="flex flex-col gap-[8px] p-[20px]"
             style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
@@ -392,7 +359,6 @@ export default function Home() {
         </motion.section>
         )}
 
-        {/* ── Live Signals ── */}
         {showSignals && (
         <motion.section
           className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
@@ -426,7 +392,6 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Empty state */}
           <div
             className="flex items-center justify-center py-[48px]"
             style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
@@ -441,7 +406,6 @@ export default function Home() {
         </motion.section>
         )}
 
-        {/* ── Portfolio & Holdings ── */}
         {showPortfolio && (
         <motion.section
           className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
@@ -489,7 +453,6 @@ export default function Home() {
         </motion.section>
         )}
 
-        {/* ── Trade History ── */}
         {showHistory && (
         <motion.section
           className="px-[24px] pb-[24px] flex flex-col gap-[12px]"
@@ -538,7 +501,6 @@ export default function Home() {
               </button>
             </div>
           </div>
-          {/* FIX: Headers now include "Status" and "Rationale" per Quinn's Section 6 spec. */}
           <div
             style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)", overflow: "hidden" }}
           >
@@ -570,7 +532,6 @@ export default function Home() {
             </table>
           </div>
 
-          {/* Compliance disclaimers */}
           <div className="flex flex-col gap-[4px] pt-[8px]">
             <p
               className="font-[family-name:var(--font-body)]"
@@ -594,8 +555,6 @@ export default function Home() {
         </motion.section>
         )}
 
-        {/* ── Settings ── */}
-        {/* FIX: Settings tab now renders a dedicated panel so the Settings nav item switches the view. */}
         {showSettings && (
         <motion.section
           className="px-[24px] py-[24px] flex flex-col gap-[12px]"
@@ -625,7 +584,6 @@ export default function Home() {
         )}
       </main>
 
-      {/* ── Context Panel 320px collapsible ── */}
       <AnimatePresence>
         {contextOpen && (
           <motion.aside
@@ -633,7 +591,6 @@ export default function Home() {
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 320, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            // FIX: ease-out cubic-bezier applied.
             transition={{ duration: 0.2, ease: EASE_OUT }}
             className="flex-shrink-0 overflow-hidden border-l border-[var(--color-border)] bg-[var(--color-surface-1)] flex flex-col"
             aria-label="Signal rationale"
