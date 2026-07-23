@@ -32,12 +32,14 @@ export function MetricCard({
         {loading ? (
           <Skeleton width="120px" height="48px" />
         ) : (
-          <span className="font-[family-name:var(--font-display)] text-[48px] font-semibold text-[var(--color-text-primary)] leading-[1.1] [font-feature-settings:'tnum']">
+          <span className="font-[family-name:var(--font-display)] text-[48px] font-[600] text-[var(--color-text-primary)] leading-[1.1] [font-feature-settings:'tnum']">
             {value}
           </span>
         )}
         {delta && !loading && (
-          <span className={`font-[family-name:var(--font-body)] text-[14px] font-normal ${deltaColor}`}>
+          <span
+            className={`font-[family-name:var(--font-body)] text-[14px] font-normal ${deltaColor}`}
+          >
             {delta}
           </span>
         )}
