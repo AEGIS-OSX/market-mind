@@ -18,7 +18,9 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [risk, setRisk] = useState("Moderate");
   const [investmentCap, setInvestmentCap] = useState("");
-  const [isConnected] = useState(true);
+  // No brokerage integration exists -- never render a fabricated
+  // "Alpaca Connected" status. Flips when a real integration lands.
+  const isConnected = false;
 
   return (
     <aside
