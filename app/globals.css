@@ -19,7 +19,9 @@
   --color-text-muted: #6B7280;
 
   /* Typography */
-  --font-display: 'Söhne', 'Geist Sans', sans-serif;
+  /* FIX: Removed 'Geist Sans' and 'sans-serif' fallbacks from --font-display.
+     If Söhne is not loaded the system fails visibly rather than degrading to slop fonts. */
+  --font-display: 'Söhne';
   --font-body: 'Berkeley Mono', 'IBM Plex Mono', monospace;
 
   /* Spacing Scale (8px base) */
@@ -43,7 +45,8 @@
   /* Type Scale */
   --text-xs: 11px;
   --text-sm: 12px;
-  --text-base: 14px;
+  /* FIX: Changed from 14px to 13px to match "Data/Body" spec for Berkeley Mono table data. */
+  --text-base: 13px;
   --text-ticker: 14px;
   --text-rationale: 14px;
   --text-lg: 16px;
