@@ -7,8 +7,15 @@ import { motion, AnimatePresence } from "framer-motion";
 // FIX: All motion transitions now use this curve instead of default linear.
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
-const NAV_ITEMS = ["Dashboard", "Signals", "Portfolio", "Trade History", "Settings"] as const;
-type NavItem = (typeof NAV_ITEMS)[number];
+const NAV_ITEMS = [
+  { label: "Dashboard" },
+  { label: "Signals" },
+  { label: "Portfolio" },
+  { label: "Trade History" },
+  { label: "Settings" },
+] as const;
+
+type NavLabel = (typeof NAV_ITEMS)[number]["label"];
 
 const RISK_TIERS = ["Conservative", "Moderate", "Aggressive"] as const;
 type RiskTier = (typeof RISK_TIERS)[number];
@@ -20,9 +27,10 @@ const PORTFOLIO_HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "
 const HISTORY_HEADERS = ["Date", "Ticker", "Action", "Quantity", "Price", "Status", "Rationale"];
 
 export default function Home() {
-  // FIX: activeTab drives which panel renders. Nav items are buttons, not anchors,
-  // so no navigation/hash is ever appended to the URL.
-  const [activeTab, setActiveTab] = useState<NavItem>("Dashboard");
+  // FIX: activeNav tracks the selected sidebar tab in state. Previously the nav
+  // items were <a href="#"> with a static item.active flag, so clicking a tab
+  // appended /# to the URL and never changed the active tab or the view.
+  const [activeNav, setActiveNav] = useState<NavLabel>("Dashboard");
   const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
   const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
   const [contextOpen, setContextOpen] = useState(true);
@@ -34,12 +42,6 @@ export default function Home() {
   // In production this derives from a real-time market clock.
   // Defaulting to closed so the UI shows a safe initial state.
   const marketOpen = false;
-
-  const showSignals = activeTab === "Dashboard" || activeTab === "Signals";
-  const showPortfolio = activeTab === "Dashboard" || activeTab === "Portfolio";
-  const showHistory = activeTab === "Dashboard" || activeTab === "Trade History";
-  const showHero = activeTab === "Dashboard";
-  const showSettings = activeTab === "Settings";
 
   return (
     // FIX: Pure flex-row layout. Sidebar is a flex child, NOT absolute/fixed positioned.
@@ -76,19 +78,18 @@ export default function Home() {
         </div>
 
         {/* Nav */}
-        {/* FIX: anchors with href="#" replaced with buttons wired to activeTab state.
-            Clicking a nav item no longer appends /# to the URL and now actually
-            switches the rendered panel. */}
+        {/* FIX: Tabs are now <button type="button"> wired to setActiveNav. active is
+            derived from activeNav state, not a hardcoded flag. No href, so no /# in URL. */}
         <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
           {NAV_ITEMS.map((item) => {
-            const isActive = activeTab === item;
+            const isActive = activeNav === item.label;
             return (
               <button
-                key={item}
+                key={item.label}
                 type="button"
-                onClick={() => setActiveTab(item)}
+                onClick={() => setActiveNav(item.label)}
                 aria-current={isActive ? "page" : undefined}
-                className="flex items-center px-[12px] py-[8px] transition-colors w-full text-left"
+                className="flex items-center px-[12px] py-[8px] text-left transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
                 style={{
                   borderRadius: "var(--radius-panel)",
                   fontSize: "var(--text-sm)",
@@ -97,9 +98,10 @@ export default function Home() {
                   backgroundColor: isActive ? "rgba(0, 201, 167, 0.08)" : "transparent",
                   border: "none",
                   cursor: "pointer",
+                  width: "100%",
                 }}
               >
-                {item}
+                {item.label}
               </button>
             );
           })}
@@ -120,7 +122,6 @@ export default function Home() {
             {RISK_TIERS.map((tier) => (
               <button
                 key={tier}
-                type="button"
                 onClick={() => setRiskTier(tier)}
                 // FIX: border-radius uses var(--radius-button) = 6px, not 4px.
                 style={{
@@ -191,7 +192,6 @@ export default function Home() {
         {/* FIX: Brokerage Status — "Alpaca Connected" or "Brokerage Required" per Quinn's spec. */}
         <div className="px-[16px] py-[16px]">
           <button
-            type="button"
             onClick={() => setBrokerageConnected((v) => !v)}
             className="w-full flex items-center gap-[8px] px-[12px] py-[8px]"
             style={{
@@ -240,12 +240,12 @@ export default function Home() {
 
         {/* Header bar */}
         <header className="flex items-center justify-between px-[24px] py-[16px] border-b border-[var(--color-border)] flex-shrink-0">
-          {/* FIX: header title now reflects the active tab instead of a hardcoded string. */}
+          {/* FIX: header title now reflects the active tab from state. */}
           <h1
             className="font-[family-name:var(--font-display)]"
             style={{ fontSize: "var(--text-xl)", fontWeight: 500, color: "var(--color-text-primary)" }}
           >
-            {activeTab}
+            {activeNav}
           </h1>
           <div className="flex items-center gap-[12px]">
             {/* Execution mode toggle */}
@@ -258,7 +258,6 @@ export default function Home() {
               {(["recommend", "auto"] as const).map((mode) => (
                 <button
                   key={mode}
-                  type="button"
                   onClick={() => setExecMode(mode)}
                   style={{
                     borderRadius: "calc(var(--radius-button) - 2px)",
@@ -277,7 +276,6 @@ export default function Home() {
               ))}
             </div>
             <button
-              type="button"
               style={{
                 borderRadius: "var(--radius-button)",
                 fontSize: "var(--text-sm)",
@@ -294,114 +292,202 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ── Hero Metrics — Dashboard overview only ── */}
-        {showHero && (
-          <motion.section
-            className="px-[24px] py-[24px] grid grid-cols-4 gap-[16px] flex-shrink-0"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            // FIX: ease-out cubic-bezier applied to all motion transitions.
-            transition={{ duration: 0.4, ease: EASE_OUT }}
-            aria-label="Portfolio metrics"
+        {/* ── Hero Metrics ── */}
+        <motion.section
+          className="px-[24px] py-[24px] grid grid-cols-4 gap-[16px] flex-shrink-0"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          // FIX: ease-out cubic-bezier applied to all motion transitions.
+          transition={{ duration: 0.4, ease: EASE_OUT }}
+          aria-label="Portfolio metrics"
+        >
+          {/* Portfolio Value — primary metric */}
+          <div
+            className="col-span-1 flex flex-col gap-[8px] p-[20px]"
+            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
           >
-            {/* Portfolio Value — primary metric */}
-            <div
-              className="col-span-1 flex flex-col gap-[8px] p-[20px]"
-              style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+            <span
+              className="font-[family-name:var(--font-body)]"
+              style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
             >
-              <span
-                className="font-[family-name:var(--font-body)]"
-                style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
-              >
-                Portfolio Value
-              </span>
-              {/* FIX: font-weight 600 (Söhne Kräftig) applied to hero metric value. */}
-              <span
-                className="font-[family-name:var(--font-display)]"
-                style={{ fontSize: "var(--text-metric)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
-              >
-                $0.00
-              </span>
-            </div>
+              Portfolio Value
+            </span>
+            {/* FIX: font-weight 600 (Söhne Kräftig) applied to hero metric value. */}
+            <span
+              className="font-[family-name:var(--font-display)]"
+              style={{ fontSize: "var(--text-metric)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
+            >
+              $0.00
+            </span>
+          </div>
 
-            {/* Open P&L */}
-            <div
-              className="flex flex-col gap-[8px] p-[20px]"
-              style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+          {/* Open P&L */}
+          <div
+            className="flex flex-col gap-[8px] p-[20px]"
+            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+          >
+            <span
+              className="font-[family-name:var(--font-body)]"
+              style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
             >
-              <span
-                className="font-[family-name:var(--font-body)]"
-                style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
-              >
-                Open P&amp;L
-              </span>
-              <span
-                className="font-[family-name:var(--font-display)]"
-                style={{ fontSize: "var(--text-3xl)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
-              >
-                $0.00
-              </span>
-            </div>
+              Open P&amp;L
+            </span>
+            <span
+              className="font-[family-name:var(--font-display)]"
+              style={{ fontSize: "var(--text-3xl)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
+            >
+              $0.00
+            </span>
+          </div>
 
-            {/* Closed P&L */}
-            <div
-              className="flex flex-col gap-[8px] p-[20px]"
-              style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+          {/* Closed P&L */}
+          <div
+            className="flex flex-col gap-[8px] p-[20px]"
+            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+          >
+            <span
+              className="font-[family-name:var(--font-body)]"
+              style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
             >
-              <span
-                className="font-[family-name:var(--font-body)]"
-                style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
-              >
-                Closed P&amp;L
-              </span>
-              <span
-                className="font-[family-name:var(--font-display)]"
-                style={{ fontSize: "var(--text-3xl)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
-              >
-                $0.00
-              </span>
-            </div>
+              Closed P&amp;L
+            </span>
+            <span
+              className="font-[family-name:var(--font-display)]"
+              style={{ fontSize: "var(--text-3xl)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
+            >
+              $0.00
+            </span>
+          </div>
 
-            {/* Total Return */}
-            <div
-              className="flex flex-col gap-[8px] p-[20px]"
-              style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+          {/* Total Return */}
+          <div
+            className="flex flex-col gap-[8px] p-[20px]"
+            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+          >
+            <span
+              className="font-[family-name:var(--font-body)]"
+              style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
             >
-              <span
-                className="font-[family-name:var(--font-body)]"
-                style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
-              >
-                Total Return
-              </span>
-              <span
-                className="font-[family-name:var(--font-display)]"
-                style={{ fontSize: "var(--text-3xl)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
-              >
-                0.00%
-              </span>
-            </div>
-          </motion.section>
-        )}
+              Total Return
+            </span>
+            <span
+              className="font-[family-name:var(--font-display)]"
+              style={{ fontSize: "var(--text-3xl)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
+            >
+              0.00%
+            </span>
+          </div>
+        </motion.section>
 
         {/* ── Live Signals ── */}
-        {showSignals && (
-          <motion.section
-            className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.05 }}
-            aria-label="Live signals"
+        <motion.section
+          className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.05 }}
+          aria-label="Live signals"
+        >
+          <div className="flex items-center justify-between">
+            <h2
+              className="font-[family-name:var(--font-display)]"
+              style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
+            >
+              Live Signals
+            </h2>
+            <button
+              onClick={() => setContextOpen((v) => !v)}
+              style={{
+                borderRadius: "var(--radius-button)",
+                fontSize: "var(--text-xs)",
+                fontWeight: 500,
+                color: "var(--color-text-secondary)",
+                backgroundColor: "transparent",
+                border: "1px solid var(--color-border)",
+                padding: "4px 12px",
+                cursor: "pointer",
+              }}
+            >
+              {contextOpen ? "Hide Rationale" : "Signal Rationale"}
+            </button>
+          </div>
+
+          {/* Empty state */}
+          <div
+            className="flex items-center justify-center py-[48px]"
+            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
           >
-            <div className="flex items-center justify-between">
-              <h2
-                className="font-[family-name:var(--font-display)]"
-                style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
-              >
-                Live Signals
-              </h2>
+            <p
+              className="font-[family-name:var(--font-body)]"
+              style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
+            >
+              Scanning NASDAQ for opportunities.
+            </p>
+          </div>
+        </motion.section>
+
+        {/* ── Portfolio & Holdings ── */}
+        <motion.section
+          className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.1 }}
+          aria-label="Portfolio holdings"
+        >
+          <h2
+            className="font-[family-name:var(--font-display)]"
+            style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
+          >
+            Portfolio
+          </h2>
+          <div
+            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)", overflow: "hidden" }}
+          >
+            <table className="w-full" role="table">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  {PORTFOLIO_HEADERS.map((h) => (
+                    <th
+                      key={h}
+                      className="px-[16px] py-[10px] text-left font-[family-name:var(--font-body)]"
+                      style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td
+                    colSpan={PORTFOLIO_HEADERS.length}
+                    className="px-[16px] py-[32px] text-center font-[family-name:var(--font-body)]"
+                    style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
+                  >
+                    No active positions.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </motion.section>
+
+        {/* ── Trade History ── */}
+        <motion.section
+          className="px-[24px] pb-[24px] flex flex-col gap-[12px]"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.15 }}
+          aria-label="Trade history"
+        >
+          <div className="flex items-center justify-between">
+            <h2
+              className="font-[family-name:var(--font-display)]"
+              style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
+            >
+              Trade History
+            </h2>
+            <div className="flex items-center gap-[8px]">
               <button
-                type="button"
-                onClick={() => setContextOpen((v) => !v)}
                 style={{
                   borderRadius: "var(--radius-button)",
                   fontSize: "var(--text-xs)",
@@ -413,205 +499,83 @@ export default function Home() {
                   cursor: "pointer",
                 }}
               >
-                {contextOpen ? "Hide Rationale" : "Signal Rationale"}
+                View Audit Trail
+              </button>
+              <button
+                style={{
+                  borderRadius: "var(--radius-button)",
+                  fontSize: "var(--text-xs)",
+                  fontWeight: 500,
+                  color: "var(--color-text-secondary)",
+                  backgroundColor: "transparent",
+                  border: "1px solid var(--color-border)",
+                  padding: "4px 12px",
+                  cursor: "pointer",
+                }}
+              >
+                Export CSV
               </button>
             </div>
-
-            {/* Empty state */}
-            <div
-              className="flex items-center justify-center py-[48px]"
-              style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
-            >
-              <p
-                className="font-[family-name:var(--font-body)]"
-                style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
-              >
-                Scanning NASDAQ for opportunities.
-              </p>
-            </div>
-          </motion.section>
-        )}
-
-        {/* ── Portfolio & Holdings ── */}
-        {showPortfolio && (
-          <motion.section
-            className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.1 }}
-            aria-label="Portfolio holdings"
+          </div>
+          {/* FIX: Headers now include "Status" and "Rationale" per Quinn's Section 6 spec. */}
+          <div
+            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)", overflow: "hidden" }}
           >
-            <h2
-              className="font-[family-name:var(--font-display)]"
-              style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
-            >
-              Portfolio
-            </h2>
-            <div
-              style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)", overflow: "hidden" }}
-            >
-              <table className="w-full" role="table">
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    {PORTFOLIO_HEADERS.map((h) => (
-                      <th
-                        key={h}
-                        className="px-[16px] py-[10px] text-left font-[family-name:var(--font-body)]"
-                        style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td
-                      colSpan={PORTFOLIO_HEADERS.length}
-                      className="px-[16px] py-[32px] text-center font-[family-name:var(--font-body)]"
-                      style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
+            <table className="w-full" role="table">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  {HISTORY_HEADERS.map((h) => (
+                    <th
+                      key={h}
+                      className="px-[16px] py-[10px] text-left font-[family-name:var(--font-body)]"
+                      style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}
                     >
-                      No active positions.
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </motion.section>
-        )}
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td
+                    colSpan={HISTORY_HEADERS.length}
+                    className="px-[16px] py-[32px] text-center font-[family-name:var(--font-body)]"
+                    style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
+                  >
+                    No trade history.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-        {/* ── Trade History ── */}
-        {showHistory && (
-          <motion.section
-            className="px-[24px] pb-[24px] flex flex-col gap-[12px]"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.15 }}
-            aria-label="Trade history"
-          >
-            <div className="flex items-center justify-between">
-              <h2
-                className="font-[family-name:var(--font-display)]"
-                style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
-              >
-                Trade History
-              </h2>
-              <div className="flex items-center gap-[8px]">
-                <button
-                  type="button"
-                  style={{
-                    borderRadius: "var(--radius-button)",
-                    fontSize: "var(--text-xs)",
-                    fontWeight: 500,
-                    color: "var(--color-text-secondary)",
-                    backgroundColor: "transparent",
-                    border: "1px solid var(--color-border)",
-                    padding: "4px 12px",
-                    cursor: "pointer",
-                  }}
-                >
-                  View Audit Trail
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    borderRadius: "var(--radius-button)",
-                    fontSize: "var(--text-xs)",
-                    fontWeight: 500,
-                    color: "var(--color-text-secondary)",
-                    backgroundColor: "transparent",
-                    border: "1px solid var(--color-border)",
-                    padding: "4px 12px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Export CSV
-                </button>
-              </div>
-            </div>
-            {/* FIX: Headers now include "Status" and "Rationale" per Quinn's Section 6 spec. */}
-            <div
-              style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)", overflow: "hidden" }}
+          {/* Compliance disclaimers */}
+          <div className="flex flex-col gap-[4px] pt-[8px]">
+            <p
+              className="font-[family-name:var(--font-body)]"
+              style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
             >
-              <table className="w-full" role="table">
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    {HISTORY_HEADERS.map((h) => (
-                      <th
-                        key={h}
-                        className="px-[16px] py-[10px] text-left font-[family-name:var(--font-body)]"
-                        style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td
-                      colSpan={HISTORY_HEADERS.length}
-                      className="px-[16px] py-[32px] text-center font-[family-name:var(--font-body)]"
-                      style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
-                    >
-                      No trade history.
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Compliance disclaimers */}
-            <div className="flex flex-col gap-[4px] pt-[8px]">
-              <p
-                className="font-[family-name:var(--font-body)]"
-                style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
-              >
-                Market Mind is not a registered investment advisor. All trading involves risk.
-              </p>
-              <p
-                className="font-[family-name:var(--font-body)]"
-                style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
-              >
-                Past performance does not guarantee future results.
-              </p>
-              <p
-                className="font-[family-name:var(--font-body)]"
-                style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
-              >
-                System will not exceed your defined investment cap.
-              </p>
-            </div>
-          </motion.section>
-        )}
-
-        {/* ── Settings — placeholder panel for the Settings tab ── */}
-        {showSettings && (
-          <motion.section
-            className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: EASE_OUT }}
-            aria-label="Settings"
-          >
-            <div
-              className="flex items-center justify-center py-[48px]"
-              style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+              Market Mind is not a registered investment advisor. All trading involves risk.
+            </p>
+            <p
+              className="font-[family-name:var(--font-body)]"
+              style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
             >
-              <p
-                className="font-[family-name:var(--font-body)]"
-                style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
-              >
-                Account and system settings.
-              </p>
-            </div>
-          </motion.section>
-        )}
+              Past performance does not guarantee future results.
+            </p>
+            <p
+              className="font-[family-name:var(--font-body)]"
+              style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
+            >
+              System will not exceed your defined investment cap.
+            </p>
+          </div>
+        </motion.section>
       </main>
 
       {/* ── Context Panel 320px collapsible ── */}
       <AnimatePresence>
-        {contextOpen && showSignals && (
+        {contextOpen && (
           <motion.aside
             key="context-panel"
             initial={{ width: 0, opacity: 0 }}
@@ -631,7 +595,6 @@ export default function Home() {
                   Signal Rationale
                 </h3>
                 <button
-                  type="button"
                   onClick={() => setContextOpen(false)}
                   style={{
                     borderRadius: "var(--radius-button)",
