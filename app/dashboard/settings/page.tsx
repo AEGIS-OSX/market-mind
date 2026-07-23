@@ -73,13 +73,13 @@ export default function SettingsPage() {
   const validateCap = (value: string): string | null => {
     if (value === "" || value === "$") return null;
     const numeric = parseFloat(value.replace(/[$,]/g, ""));
-    if (isNaN(numeric)) return "Enter a valid dollar amount (e.g. $5000.00)";
+    if (isNaN(numeric)) return "Investment cap must be a positive number";
     if (numeric < 0) return "Investment cap cannot be negative";
-    if (numeric > 10_000_000) return "Investment cap cannot exceed $10,000,000";
+    if (numeric > 1_000_000) return "Investment cap cannot exceed $1,000,000";
     return null;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isDirty) return;
     const err = validateCap(cap);
     if (err) {
@@ -87,8 +87,27 @@ export default function SettingsPage() {
       return;
     }
     setCapError(null);
-    setInitialState({ risk, cap, isConnected });
-    setShowToast(true);
+    const numeric = parseFloat(cap.replace(/[$,]/g, ""));
+    try {
+      const res = await fetch("/api/user/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          risk_tolerance: risk,
+          investment_cap: numeric,
+          brokerage_connected: isConnected,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setCapError(data.error || "Failed to save settings");
+        return;
+      }
+      setInitialState({ risk, cap, isConnected });
+      setShowToast(true);
+    } catch {
+      setCapError("Network error. Please try again.");
+    }
   };
 
   useEffect(() => {
@@ -171,12 +190,25 @@ export default function SettingsPage() {
               value={cap}
               onChange={(e) => {
                 const raw = e.target.value;
-                const stripped = raw.replace(/[^0-9$.,]/g, "");
-                setCap(stripped);
-                setCapError(null);
+                setCap(raw);
+                if (raw === "" || raw === "$") {
+                  setCapError(null);
+                  return;
+                }
+                const numeric = parseFloat(raw.replace(/[$,]/g, ""));
+                if (isNaN(numeric)) {
+                  setCapError("Investment cap must be a positive number");
+                } else if (numeric < 0) {
+                  setCapError("Investment cap cannot be negative");
+                } else if (numeric > 1_000_000) {
+                  setCapError("Investment cap cannot exceed $1,000,000");
+                } else {
+                  setCapError(null);
+                }
               }}
               placeholder="$0.00"
               inputMode="decimal"
+              pattern="[0-9]*\.?[0-9]+"
               autoComplete="off"
               maxLength={15}
               className="h-[44px] w-full bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] px-[16px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline focus:outline-2 focus:outline-[var(--color-accent)] transition-all font-[family-name:var(--font-body)]"
