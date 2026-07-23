@@ -2,24 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { createClient } from "@/lib/supabase/client";
 
-/**
- * DESIGN TOKENS REFERENCE (from globals.css):
- * --color-canvas: #0D0F14
- * --color-surface-1: #141720
- * --color-surface-2: #1C2030
- * --color-surface-3: #10121A
- * --color-border: #252A38
- * --color-accent: #00C9A7
- * --color-accent-ink: #0D0F14
- * --color-gain: #22C55E
- * --color-loss: #EF4444
- * --color-text-primary: #F1F5F9
- * --color-text-secondary: #94A3B8
- * --color-text-muted: #6B7280
- * --font-display: Söhne
- * --font-body: Berkeley Mono
- */
+const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
 interface MetricCardProps {
   label: string;
@@ -30,9 +15,9 @@ interface MetricCardProps {
 }
 
 const Skeleton = () => (
-  <div className="animate-pulse space-y-2">
-    <div className="h-3 w-24 bg-[var(--color-surface-3)] rounded-[var(--radius-sm)]" />
-    <div className="h-8 w-32 bg-[var(--color-surface-3)] rounded-[var(--radius-sm)]" />
+  <div className="animate-pulse space-y-[8px]">
+    <div className="h-[12px] w-[96px] bg-[var(--color-surface-3)] rounded-[var(--radius-sm)]" />
+    <div className="h-[48px] w-[128px] bg-[var(--color-surface-3)] rounded-[var(--radius-sm)]" />
   </div>
 );
 
@@ -51,32 +36,38 @@ const MetricCard = ({ label, value, delta, deltaType, loading }: MetricCardProps
 
   if (loading) {
     return (
-      <div className="p-6 bg-[var(--color-surface-1)] border border-[var(--color-border)] rounded-[var(--radius-panel)] h-[104px] flex flex-col justify-center">
+      <div className="p-[24px] bg-[var(--color-surface-1)] border border-[var(--color-border)] rounded-[var(--radius-panel)] h-[104px] flex flex-col justify-center">
         <Skeleton />
       </div>
     );
   }
 
-  const deltaColor = deltaType === "gain" ? "text-[var(--color-gain)]" : "text-[var(--color-loss)]";
-  const flashColor = deltaType === "loss" ? "var(--color-loss)" : "var(--color-gain)";
+  const deltaColor =
+    deltaType === "gain"
+      ? "text-[var(--color-gain)]"
+      : "text-[var(--color-loss)]";
+  const flashColor =
+    deltaType === "loss" ? "var(--color-loss)" : "var(--color-gain)";
 
   return (
-    <div className="p-6 bg-[var(--color-surface-1)] border border-[var(--color-border)] rounded-[var(--radius-panel)] hover:bg-[var(--color-surface-2)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]">
-      <p className="text-[13px] font-[family-name:var(--font-body)] text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">
+    <div className="p-[24px] bg-[var(--color-surface-1)] border border-[var(--color-border)] rounded-[var(--radius-panel)] hover:bg-[var(--color-surface-2)] transition-colors duration-[var(--duration-fast)]">
+      <p className="text-[11px] font-[family-name:var(--font-body)] text-[var(--color-text-secondary)] mb-[8px] uppercase tracking-[0.08em]">
         {label}
       </p>
-      <div className="flex items-baseline gap-2">
+      <div className="flex items-baseline gap-[8px]">
         <motion.span
           animate={{
             color: isFlashing ? flashColor : "var(--color-text-primary)",
           }}
           transition={{ duration: 0.3 }}
-          className="text-[48px] font-[family-name:var(--font-display)] font-semibold leading-[1.1]"
+          className="text-[48px] font-[family-name:var(--font-display)] font-[600] leading-[1.1] [font-feature-settings:'tnum']"
         >
           {value}
         </motion.span>
         {delta && (
-          <span className={`text-[13px] font-[family-name:var(--font-body)] ${deltaColor}`}>
+          <span
+            className={`font-[family-name:var(--font-body)] text-[14px] font-[400] ${deltaColor}`}
+          >
             {delta}
           </span>
         )}
@@ -85,150 +76,189 @@ const MetricCard = ({ label, value, delta, deltaType, loading }: MetricCardProps
   );
 };
 
-export default function DashboardPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [executionMode, setExecutionMode] = useState<"auto" | "recommend" | null>(null);
-  const [marketOpen, setMarketOpen] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
+interface PortfolioMetrics {
+  portfolioValue: string;
+  openPnl: string;
+  openPnlDelta: string;
+  openPnlType: "gain" | "loss";
+  closedPnl: string;
+  closedPnlType: "gain" | "loss";
+  totalReturn: string;
+  totalReturnType: "gain" | "loss";
+}
 
-  // Fetch settings from server on mount
+const EMPTY_METRICS: PortfolioMetrics = {
+  portfolioValue: "--",
+  openPnl: "--",
+  openPnlDelta: "",
+  openPnlType: "gain",
+  closedPnl: "--",
+  closedPnlType: "gain",
+  totalReturn: "--",
+  totalReturnType: "gain",
+};
+
+function formatCurrency(n: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+function formatPercent(n: number): string {
+  const sign = n >= 0 ? "+" : "";
+  return `${sign}${n.toFixed(2)}%`;
+}
+
+export default function DashboardPage() {
+  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState<PortfolioMetrics>(EMPTY_METRICS);
+  const marketOpen = false;
+
   useEffect(() => {
-    async function loadSettings() {
+    let cancelled = false;
+
+    async function loadMetrics() {
       try {
-        const response = await fetch("/api/user/settings");
-        if (!response.ok) {
-          throw new Error("Failed to load settings");
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user || cancelled) {
+          setLoading(false);
+          return;
         }
-        const data = await response.json();
-        setExecutionMode(data.execution_mode);
+
+        const [positionsResult, tradesResult] = await Promise.all([
+          supabase
+            .from("positions")
+            .select("*")
+            .eq("user_id", user.id),
+          supabase
+            .from("trades")
+            .select("*")
+            .eq("user_id", user.id),
+        ]);
+
+        if (cancelled) return;
+
+        const positions = positionsResult.data || [];
+        const trades = tradesResult.data || [];
+
+        let totalMarketValue = 0;
+        let totalCostBasis = 0;
+
+        for (const pos of positions) {
+          const currentPrice = pos.current_price || pos.avg_cost || 0;
+          const marketValue = pos.quantity * currentPrice;
+          const costBasis = pos.quantity * (pos.avg_cost || 0);
+          totalMarketValue += marketValue;
+          totalCostBasis += costBasis;
+        }
+
+        const openPnlValue = totalMarketValue - totalCostBasis;
+        const totalReturnPct =
+          totalCostBasis > 0
+            ? (openPnlValue / totalCostBasis) * 100
+            : 0;
+
+        let closedPnlValue = 0;
+        for (const trade of trades) {
+          if (trade.realized_pnl != null) {
+            closedPnlValue += trade.realized_pnl;
+          }
+        }
+
+        setMetrics({
+          portfolioValue: formatCurrency(totalMarketValue),
+          openPnl: formatCurrency(Math.abs(openPnlValue)),
+          openPnlDelta: formatPercent(totalReturnPct),
+          openPnlType: openPnlValue >= 0 ? "gain" : "loss",
+          closedPnl: formatCurrency(Math.abs(closedPnlValue)),
+          closedPnlType: closedPnlValue >= 0 ? "gain" : "loss",
+          totalReturn: formatPercent(totalReturnPct),
+          totalReturnType: totalReturnPct >= 0 ? "gain" : "loss",
+        });
       } catch {
-        setError("Failed to load execution mode. Please refresh the page.");
+        // Fetch failed — show empty metrics, no error banner.
+        // The user can navigate to sub-pages for detailed data.
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
-    loadSettings();
+
+    loadMetrics();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function handleModeChange(newMode: "auto" | "recommend") {
-    if (isUpdating || executionMode === null) return;
-    if (executionMode === newMode) return;
-
-    const previousMode = executionMode;
-    setIsUpdating(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/user/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ execution_mode: newMode }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to update execution mode");
-      }
-
-      const data = await response.json();
-      setExecutionMode(data.execution_mode);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update execution mode");
-      setExecutionMode(previousMode);
-    } finally {
-      setIsUpdating(false);
-    }
-  }
-
   return (
-    <main className="flex-1 flex flex-col min-h-screen bg-[var(--color-canvas)]">
-      {/* Top Bar */}
-      <header className="h-12 border-b border-[var(--color-border)] px-6 flex items-center justify-between shrink-0">
-        <h1 className="text-[16px] font-[family-name:var(--font-display)] font-medium text-[var(--color-text-primary)]">
+    <div className="flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-text-primary)]">
+      {/* Page header */}
+      <header className="flex items-center justify-between px-[24px] h-[64px] border-b border-[var(--color-border)] bg-[var(--color-surface-1)] flex-shrink-0">
+        <h1 className="font-[family-name:var(--font-display)] text-[22px] font-[500] text-[var(--color-text-primary)]">
           Dashboard
         </h1>
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--color-surface-3)] border border-[var(--color-border)]">
-          <div 
-            className={`w-2 h-2 rounded-full ${marketOpen ? "bg-[var(--color-gain)]" : "bg-[var(--color-text-muted)]"}`} 
+        <div className="flex items-center gap-[8px]">
+          <span
+            className="w-[6px] h-[6px] rounded-full"
+            style={{
+              backgroundColor: marketOpen
+                ? "var(--color-gain)"
+                : "var(--color-text-muted)",
+            }}
           />
-          <span className={`text-[13px] font-[family-name:var(--font-body)] ${marketOpen ? "text-[var(--color-gain)]" : "text-[var(--color-text-muted)]"}`}>
+          <span className="font-[family-name:var(--font-body)] text-[12px] text-[var(--color-text-secondary)]">
             {marketOpen ? "NASDAQ Open" : "NASDAQ Closed"}
           </span>
         </div>
       </header>
 
-      {/* Metrics Grid */}
-      <section className="p-6 grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard
-          label="Portfolio Value"
-          value="$24,831.50"
-          loading={isLoading}
-        />
-        <MetricCard
-          label="Open P&L"
-          value="+$312.40"
-          delta="+1.27%"
-          deltaType="gain"
-          loading={isLoading}
-        />
-        <MetricCard
-          label="Closed P&L"
-          value="+$1,204.80"
-          delta="+4.85%"
-          deltaType="gain"
-          loading={isLoading}
-        />
-        <MetricCard
-          label="Total Return"
-          value="+5.24%"
-          deltaType="gain"
-          loading={isLoading}
-        />
+      {/* Metrics grid */}
+      <section className="p-[24px]">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE_OUT }}
+          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-[16px]"
+        >
+          <MetricCard
+            label="Portfolio Value"
+            value={metrics.portfolioValue}
+            loading={loading}
+          />
+          <MetricCard
+            label="Open P&L"
+            value={metrics.openPnl}
+            delta={metrics.openPnlDelta || undefined}
+            deltaType={metrics.openPnlType}
+            loading={loading}
+          />
+          <MetricCard
+            label="Closed P&L"
+            value={metrics.closedPnl}
+            deltaType={metrics.closedPnlType}
+            loading={loading}
+          />
+          <MetricCard
+            label="Total Return"
+            value={metrics.totalReturn}
+            deltaType={metrics.totalReturnType}
+            loading={loading}
+          />
+        </motion.div>
       </section>
 
-      {/* Controls Section */}
-      <section className="px-6 pb-6 space-y-4">
-        {error && (
-          <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-loss)]/10 border border-[var(--color-loss)]/20 text-[var(--color-loss)] text-[13px] font-[family-name:var(--font-body)]">
-            {error}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-3">
-          <label className="text-[13px] font-[family-name:var(--font-body)] text-[var(--color-text-secondary)]">
-            Execution Mode
-          </label>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleModeChange("auto")}
-              disabled={isLoading || isUpdating}
-              className={`h-9 px-4 rounded-[var(--radius-button)] text-[13px] font-medium transition-all duration-[var(--duration-fast)] ease-[var(--ease-out)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:ring-offset-2 focus:ring-offset-[var(--color-canvas)] disabled:opacity-50 disabled:cursor-not-allowed ${
-                executionMode === "auto"
-                  ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
-                  : "bg-[var(--color-surface-3)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
-              }`}
-            >
-              Auto-trade
-            </button>
-            <button
-              onClick={() => handleModeChange("recommend")}
-              disabled={isLoading || isUpdating}
-              className={`h-9 px-4 rounded-[var(--radius-button)] text-[13px] font-medium transition-all duration-[var(--duration-fast)] ease-[var(--ease-out)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:ring-offset-2 focus:ring-offset-[var(--color-canvas)] disabled:opacity-50 disabled:cursor-not-allowed ${
-                executionMode === "recommend"
-                  ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
-                  : "bg-[var(--color-surface-3)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
-              }`}
-            >
-              Recommend only
-            </button>
-          </div>
-        </div>
-
-        <p className="text-[11px] font-[family-name:var(--font-body)] text-[var(--color-text-muted)]">
-          System will not exceed your defined investment cap.
+      {/* Disclaimer */}
+      <div className="px-[24px] pb-[8px]">
+        <p className="font-[family-name:var(--font-body)] text-[11px] text-[var(--color-text-muted)]">
+          Past performance does not guarantee future results.
         </p>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
