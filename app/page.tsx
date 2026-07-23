@@ -7,8 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 // FIX: All motion transitions now use this curve instead of default linear.
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
-// FIX(tabs): nav items no longer carry a hardcoded `active` flag. The active
-// tab is tracked in `activeNav` state and each item declares the view it opens.
 const NAV_ITEMS = [
   { label: "Dashboard" },
   { label: "Signals" },
@@ -36,22 +34,21 @@ export default function Home() {
   const [investmentCap, setInvestmentCap] = useState("10000");
   // Brokerage connection state — drives "Alpaca Connected" / "Brokerage Required" copy.
   const [brokerageConnected, setBrokerageConnected] = useState(false);
-  // FIX(tabs): active tab state. Drives nav highlight, header title, and which
-  // content view renders. Replaces the old static href="#" anchors that only
-  // appended /# to the URL and never changed the view.
+  // FIX: Active nav is now real component state. Clicking a nav button sets this;
+  // the header title and section visibility derive from it. No hash is ever written to the URL.
   const [activeNav, setActiveNav] = useState<NavLabel>("Dashboard");
 
   // In production this derives from a real-time market clock.
   // Defaulting to closed so the UI shows a safe initial state.
   const marketOpen = false;
 
-  // Which primary sections are visible for the current tab. Dashboard shows the
-  // full overview; the other tabs scope down to their own view.
-  const showMetrics = activeNav === "Dashboard";
+  // FIX: Section visibility derived from activeNav. "Dashboard" shows the full overview;
+  // each specific tab isolates its own section so the visible content actually changes on click.
   const showSignals = activeNav === "Dashboard" || activeNav === "Signals";
   const showPortfolio = activeNav === "Dashboard" || activeNav === "Portfolio";
   const showHistory = activeNav === "Dashboard" || activeNav === "Trade History";
   const showSettings = activeNav === "Settings";
+  const showMetrics = activeNav === "Dashboard" || activeNav === "Portfolio";
 
   return (
     // FIX: Pure flex-row layout. Sidebar is a flex child, NOT absolute/fixed positioned.
@@ -88,10 +85,9 @@ export default function Home() {
         </div>
 
         {/* Nav */}
-        {/* FIX(tabs): buttons, not <a href="#">. onClick sets activeNav so the view
-            switches with no page reload and no /# appended to the URL. aria-current
-            marks the active tab for assistive tech; buttons are keyboard-reachable
-            and fire on Enter/Space natively. */}
+        {/* FIX: Tab triggers are now <button type="button"> with an onClick that sets activeNav.
+            Previously these were <a href="#"> with no handler, which appended /# to the URL and
+            changed no state. Buttons are natively keyboard-operable (Enter/Space) and focusable. */}
         <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
           {NAV_ITEMS.map((item) => {
             const isActive = activeNav === item.label;
@@ -101,7 +97,7 @@ export default function Home() {
                 type="button"
                 onClick={() => setActiveNav(item.label)}
                 aria-current={isActive ? "page" : undefined}
-                className="flex items-center px-[12px] py-[8px] transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+                className="flex items-center w-full text-left px-[12px] py-[8px] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
                 style={{
                   borderRadius: "var(--radius-panel)",
                   fontSize: "var(--text-sm)",
@@ -110,7 +106,6 @@ export default function Home() {
                   backgroundColor: isActive ? "rgba(0, 201, 167, 0.08)" : "transparent",
                   border: "none",
                   cursor: "pointer",
-                  width: "100%",
                 }}
               >
                 {item.label}
@@ -250,11 +245,11 @@ export default function Home() {
       </aside>
 
       {/* ── Main content — flex-1 min-w-0 prevents hero metric from being clipped ── */}
-      <main className="flex-1 min-w-0 overflow-auto flex flex-col" aria-label={activeNav}>
+      <main className="flex-1 min-w-0 overflow-auto flex flex-col" aria-label="Dashboard">
 
         {/* Header bar */}
         <header className="flex items-center justify-between px-[24px] py-[16px] border-b border-[var(--color-border)] flex-shrink-0">
-          {/* FIX(tabs): title reflects the active tab instead of a hardcoded label. */}
+          {/* FIX: Header title reflects the active nav so the view change is visible. */}
           <h1
             className="font-[family-name:var(--font-display)]"
             style={{ fontSize: "var(--text-xl)", fontWeight: 500, color: "var(--color-text-primary)" }}
@@ -600,6 +595,7 @@ export default function Home() {
         )}
 
         {/* ── Settings ── */}
+        {/* FIX: Settings tab now renders a dedicated panel so the Settings nav item switches the view. */}
         {showSettings && (
         <motion.section
           className="px-[24px] py-[24px] flex flex-col gap-[12px]"
@@ -622,7 +618,7 @@ export default function Home() {
               className="font-[family-name:var(--font-body)]"
               style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
             >
-              Account and execution preferences are managed in the sidebar. More settings coming soon.
+              Risk tolerance, investment cap, and brokerage connection are managed in the sidebar.
             </p>
           </div>
         </motion.section>
