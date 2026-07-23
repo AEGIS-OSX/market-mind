@@ -1,298 +1,193 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Link2, Unlink } from "lucide-react";
 
-type RiskLevel = "Conservative" | "Moderate" | "Aggressive";
-
-interface ModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-  confirmLabel: string;
-  onConfirm: () => void;
-  isDestructive?: boolean;
-}
-
-const Modal = ({ isOpen, onClose, title, children, confirmLabel, onConfirm, isDestructive }: ModalProps) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-[24px] bg-[var(--color-canvas)]/80 backdrop-blur-sm">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        className="w-full max-w-[400px] bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-[var(--radius-modal)] p-[24px] shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="modal-title"
-      >
-        <h2 id="modal-title" className="text-[var(--text-lg)] font-[500] text-[var(--color-text-primary)] mb-[16px] font-[family-name:var(--font-display)]">
-          {title}
-        </h2>
-        <div className="text-[var(--text-base)] text-[var(--color-text-secondary)] mb-[24px] leading-[1.6] font-[family-name:var(--font-body)]">
-          {children}
-        </div>
-        <div className="flex flex-col gap-[8px]">
-          <button
-            onClick={onConfirm}
-            className={`h-[44px] w-full rounded-[var(--radius-button)] font-[500] transition-opacity hover:opacity-90 ${
-              isDestructive
-                ? "bg-[var(--color-surface-3)] text-[var(--color-loss)]"
-                : "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
-            }`}
-          >
-            {confirmLabel}
-          </button>
-          <button
-            onClick={onClose}
-            className="h-[44px] w-full rounded-[var(--radius-button)] bg-[var(--color-surface-3)] text-[var(--color-text-secondary)] font-[500] transition-opacity hover:opacity-90"
-          >
-            Cancel
-          </button>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
+type RiskLevel = "conservative" | "moderate" | "aggressive";
 
 export default function SettingsPage() {
-  const [risk, setRisk] = useState<RiskLevel>("Moderate");
-  const [cap, setCap] = useState("");
-  const [capError, setCapError] = useState<string | null>(null);
+  const [riskLevel, setRiskLevel] = useState<RiskLevel>("moderate");
+  const [investmentCap, setInvestmentCap] = useState("");
   const [isConnected, setIsConnected] = useState(false);
-  const [modal, setModal] = useState<"connect" | "disconnect" | null>(null);
-  const [showToast, setShowToast] = useState(false);
-  const [initialState, setInitialState] = useState({ risk: "Moderate", cap: "", isConnected: false });
+  const [isLoading, setIsLoading] = useState(true);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [initialState, setInitialState] = useState({
+    riskLevel: "moderate" as RiskLevel,
+    investmentCap: "",
+  });
 
-  const isDirty = risk !== initialState.risk || cap !== initialState.cap || isConnected !== initialState.isConnected;
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await fetch("/api/user/settings");
+        if (res.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+        if (res.ok) {
+          const data = await res.json();
+          const loadedRisk = (data.risk_level as RiskLevel) || "moderate";
+          const loadedCap = data.investment_cap?.toString() ?? "";
+          setRiskLevel(loadedRisk);
+          setInvestmentCap(loadedCap);
+          setIsConnected(data.brokerage_connected ?? false);
+          setInitialState({
+            riskLevel: loadedRisk,
+            investmentCap: loadedCap,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load settings:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadSettings();
+  }, []);
 
-  const validateCap = (value: string): string | null => {
-    if (value === "" || value === "$") return null;
-    const numeric = parseFloat(value.replace(/[$,]/g, ""));
-    if (isNaN(numeric)) return "Investment cap must be a positive number";
-    if (numeric < 0) return "Investment cap cannot be negative";
-    if (numeric > 1_000_000) return "Investment cap cannot exceed $1,000,000";
-    return null;
-  };
+  const hasChanges =
+    riskLevel !== initialState.riskLevel ||
+    investmentCap !== initialState.investmentCap;
 
   const handleSave = async () => {
-    if (!isDirty) return;
-    const err = validateCap(cap);
-    if (err) {
-      setCapError(err);
-      return;
-    }
-    setCapError(null);
-    const numeric = parseFloat(cap.replace(/[$,]/g, ""));
+    setSaveError(null);
+    setSaveSuccess(false);
     try {
       const res = await fetch("/api/user/settings", {
-        method: "POST",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          risk_tolerance: risk,
-          investment_cap: numeric,
-          brokerage_connected: isConnected,
+          risk_level: riskLevel,
+          investment_cap: investmentCap ? parseFloat(investmentCap) : null,
         }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setCapError(data.error || "Failed to save settings");
+        const err = await res
+          .json()
+          .catch(() => ({ error: "Failed to save settings" }));
+        setSaveError(err.error ?? "Failed to save settings");
         return;
       }
-      setInitialState({ risk, cap, isConnected });
-      setShowToast(true);
-    } catch {
-      setCapError("Network error. Please try again.");
+      const saved = await res.json();
+      setInitialState({
+        riskLevel: saved.risk_level,
+        investmentCap: saved.investment_cap?.toString() ?? "",
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (_err) {
+      setSaveError("Network error. Please try again.");
     }
   };
 
-  useEffect(() => {
-    if (showToast) {
-      const timer = setTimeout(() => setShowToast(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [showToast]);
-
   const handleConnect = () => {
-    setIsConnected(true);
-    setModal(null);
+    alert("Brokerage connection is not yet implemented.");
   };
 
   const handleDisconnect = () => {
-    setIsConnected(false);
-    setModal(null);
+    alert("Brokerage disconnection is not yet implemented.");
   };
 
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-4 animate-pulse">
+        <div className="h-8 bg-gray-200 rounded w-1/4" />
+        <div className="h-4 bg-gray-200 rounded w-1/2" />
+        <div className="h-10 bg-gray-200 rounded" />
+        <div className="h-10 bg-gray-200 rounded" />
+      </div>
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-text-primary)] font-[family-name:var(--font-body)]">
-      {/* Top Bar */}
-      <header className="h-[64px] border-b border-[var(--color-border)] flex items-center px-[24px]">
-        <h1 className="text-[var(--text-section-title)] font-[500] font-[family-name:var(--font-display)]">
-          Settings
-        </h1>
-      </header>
-
-      <div className="max-w-[640px] mx-auto p-[24px] flex flex-col gap-[32px]">
-        {/* Success Toast */}
-        <AnimatePresence>
-          {showToast && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="bg-[var(--color-surface-2)] border border-[var(--color-gain)] text-[var(--color-gain)] rounded-[var(--radius-panel)] p-[12px_16px] text-[var(--text-base)]"
-              role="status"
+    <div className="p-6 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <p className="text-muted-foreground">Manage your preferences</p>
+      </div>
+      <Separator />
+      <Card>
+        <CardHeader>
+          <CardTitle>Risk Profile</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Risk Level</Label>
+            <Select
+              value={riskLevel}
+              onValueChange={(v) => setRiskLevel(v as RiskLevel)}
             >
-              Settings updated.
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Section 1: Risk & Capital */}
-        <section className="flex flex-col gap-[24px]">
-          <h2 className="text-[var(--text-lg)] font-[500] text-[var(--color-text-primary)] font-[family-name:var(--font-display)]">
-            Risk & Capital
-          </h2>
-
-          <div className="flex flex-col gap-[8px]">
-            <label className="text-[var(--text-xs)] text-[var(--color-text-muted)] uppercase tracking-wider font-[500]">
-              Risk Tolerance
-            </label>
-            <div className="grid grid-cols-3 gap-[8px]" role="radiogroup" aria-label="Risk Tolerance">
-              {(["Conservative", "Moderate", "Aggressive"] as RiskLevel[]).map((level) => (
-                <button
-                  key={level}
-                  role="radio"
-                  aria-checked={risk === level}
-                  onClick={() => setRisk(level)}
-                  className={`h-[44px] rounded-[var(--radius-button)] text-[var(--text-base)] font-[500] transition-all ${
-                    risk === level
-                      ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
-                      : "bg-[var(--color-surface-3)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)]"
-                  }`}
-                >
-                  {level}
-                </button>
-              ))}
-            </div>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="conservative">Conservative</SelectItem>
+                <SelectItem value="moderate">Moderate</SelectItem>
+                <SelectItem value="aggressive">Aggressive</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-
-          <div className="flex flex-col gap-[8px]">
-            <label className="text-[var(--text-xs)] text-[var(--color-text-muted)] uppercase tracking-wider font-[500]">
-              Investment Cap
-            </label>
-            <input
-              type="text"
-              value={cap}
-              onChange={(e) => {
-                const raw = e.target.value;
-                setCap(raw);
-                if (raw === "" || raw === "$") {
-                  setCapError(null);
-                  return;
-                }
-                const numeric = parseFloat(raw.replace(/[$,]/g, ""));
-                if (isNaN(numeric)) {
-                  setCapError("Investment cap must be a positive number");
-                } else if (numeric < 0) {
-                  setCapError("Investment cap cannot be negative");
-                } else if (numeric > 1_000_000) {
-                  setCapError("Investment cap cannot exceed $1,000,000");
-                } else {
-                  setCapError(null);
-                }
-              }}
-              placeholder="$0.00"
-              inputMode="decimal"
-              pattern="[0-9]*\.?[0-9]+"
-              autoComplete="off"
-              maxLength={15}
-              className="h-[44px] w-full bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] px-[16px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline focus:outline-2 focus:outline-[var(--color-accent)] transition-all font-[family-name:var(--font-body)]"
+          <div className="space-y-2">
+            <Label>Investment Cap ($)</Label>
+            <Input
+              type="number"
+              value={investmentCap}
+              onChange={(e) => setInvestmentCap(e.target.value)}
+              placeholder="Enter amount"
             />
-            {capError && (
-              <p role="alert" className="text-[var(--text-xs)] text-[var(--color-loss)] mt-[4px]">
-                {capError}
+          </div>
+          {saveError && (
+            <p className="text-red-500 text-sm">{saveError}</p>
+          )}
+          {saveSuccess && (
+            <p className="text-green-500 text-sm">
+              Settings saved successfully.
+            </p>
+          )}
+          <Button onClick={handleSave} disabled={!hasChanges}>
+            Save Changes
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Brokerage Connection</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Alpaca</p>
+              <p className="text-sm text-muted-foreground">
+                {isConnected ? "Connected" : "Not connected"}
               </p>
+            </div>
+            {isConnected ? (
+              <Button variant="outline" onClick={handleDisconnect}>
+                <Unlink className="w-4 h-4 mr-2" />
+                Disconnect
+              </Button>
+            ) : (
+              <Button onClick={handleConnect}>
+                <Link2 className="w-4 h-4 mr-2" />
+                Connect
+              </Button>
             )}
           </div>
-        </section>
-
-        {/* Section 2: Brokerage */}
-        <section className="pt-[32px] border-t border-[var(--color-border)] flex flex-col gap-[24px]">
-          <h2 className="text-[var(--text-lg)] font-[500] text-[var(--color-text-primary)] font-[family-name:var(--font-display)]">
-            Brokerage Connection
-          </h2>
-
-          {isConnected ? (
-            <div className="flex items-center justify-between bg-[var(--color-surface-1)] p-[16px] rounded-[var(--radius-panel)] border border-[var(--color-border)]">
-              <div className="flex items-center gap-[12px]">
-                <div className="w-[8px] h-[8px] rounded-full bg-[var(--color-gain)] shadow-[0_0_8px_var(--color-gain)]" />
-                <span className="text-[var(--text-base)] font-[500]">Alpaca Connected</span>
-              </div>
-              <button
-                onClick={() => setModal("disconnect")}
-                className="text-[var(--text-base)] text-[var(--color-loss)] font-[500] hover:underline"
-              >
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setModal("connect")}
-              className="h-[44px] w-full bg-[var(--color-accent)] text-[var(--color-accent-ink)] rounded-[var(--radius-button)] font-[500] transition-opacity hover:opacity-90"
-            >
-              Connect Alpaca Markets
-            </button>
-          )}
-        </section>
-
-        {/* Save Button */}
-        <div className="pt-[32px] border-t border-[var(--color-border)]">
-          <button
-            onClick={handleSave}
-            disabled={!isDirty}
-            aria-disabled={!isDirty}
-            className={`h-[44px] w-full rounded-[var(--radius-button)] font-[600] transition-all ${
-              isDirty
-                ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)] hover:opacity-90"
-                : "bg-[var(--color-surface-3)] text-[var(--color-text-muted)] opacity-[0.55] cursor-not-allowed"
-            }`}
-          >
-            Save Settings
-          </button>
-        </div>
-      </div>
-
-      {/* Modals */}
-      <AnimatePresence>
-        {modal === "connect" && (
-          <Modal
-            isOpen={true}
-            onClose={() => setModal(null)}
-            title="Connect Alpaca Markets"
-            confirmLabel="Continue to Alpaca"
-            onConfirm={handleConnect}
-          >
-            Market Mind requires a connected Alpaca account to execute trades. Your credentials are encrypted and never exposed.
-          </Modal>
-        )}
-        {modal === "disconnect" && (
-          <Modal
-            isOpen={true}
-            onClose={() => setModal(null)}
-            title="Disconnect Brokerage"
-            confirmLabel="Disconnect Account"
-            onConfirm={handleDisconnect}
-            isDestructive
-          >
-            This will stop all automated trading and remove access to your Alpaca account.
-          </Modal>
-        )}
-      </AnimatePresence>
-    </main>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
