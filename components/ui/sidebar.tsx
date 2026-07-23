@@ -27,11 +27,23 @@ export default function Sidebar() {
     >
       {/* Logo */}
       <div className="px-[16px] py-[20px] border-b border-[var(--color-border)]">
-        <span
-          className="font-[family-name:var(--font-display)] text-[16px] font-[600] text-[var(--color-text-primary)]"
-        >
-          Market Mind
-        </span>
+        <div className="flex items-center gap-[10px]">
+          {/* MM logo mark: 28x28, accent bg, accent-ink text */}
+          <div
+            className="w-[28px] h-[28px] flex items-center justify-center flex-shrink-0 rounded-[var(--radius-sm)]"
+            style={{ backgroundColor: "var(--color-accent)" }}
+          >
+            <span
+              className="font-[family-name:var(--font-display)] text-[11px] font-[700] leading-none select-none"
+              style={{ color: "var(--color-accent-ink)" }}
+            >
+              MM
+            </span>
+          </div>
+          <span className="font-[family-name:var(--font-display)] text-[16px] font-[600] text-[var(--color-text-primary)]">
+            Market Mind
+          </span>
+        </div>
       </div>
 
       {/* Navigation */}
@@ -42,7 +54,7 @@ export default function Sidebar() {
             <Link
               key={link.href}
               href={link.href}
-              className={`flex items-center px-[16px] py-[10px] font-[family-name:var(--font-body)] text-[14px] transition-colors
+              className={`flex items-center px-[16px] py-[10px] font-[family-name:var(--font-body)] text-[var(--text-sm)] transition-colors
                 ${
                   isActive
                     ? "bg-[var(--color-surface-2)] text-[var(--color-accent)] font-[500]"
@@ -70,9 +82,9 @@ export default function Sidebar() {
               <button
                 key={tier}
                 onClick={() => setRisk(tier)}
-                className={`flex-1 h-[28px] text-[11px] font-[family-name:var(--font-body)] rounded-[var(--radius-button)] transition-colors ${
+                className={`flex-1 py-[6px] text-[11px] font-[family-name:var(--font-body)] font-[500] rounded-[var(--radius-button)] transition-colors ${
                   risk === tier
-                    ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)] font-[500]"
+                    ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
                     : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                 }`}
               >
@@ -87,18 +99,18 @@ export default function Sidebar() {
           <label
             htmlFor="investment-cap"
             className="text-[11px] font-[400] text-[var(--color-text-muted)] uppercase tracking-[0.08em]"
+            title="The maximum dollar amount Market Mind is authorized to manage."
           >
             Investment Cap
           </label>
           <input
             id="investment-cap"
-            type="number"
-            min="0"
+            type="text"
+            inputMode="decimal"
             value={investmentCap}
             onChange={(e) => setInvestmentCap(e.target.value)}
             placeholder="$0.00"
-            title="The maximum dollar amount Market Mind is authorized to manage."
-            className="h-[36px] px-[10px] bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] text-[13px] font-[family-name:var(--font-body)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors [font-feature-settings:'tnum']"
+            className="w-full bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] px-[10px] py-[6px] text-[var(--text-sm)] font-[family-name:var(--font-body)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
           />
         </div>
 
@@ -112,17 +124,10 @@ export default function Sidebar() {
                 : "var(--color-loss)",
             }}
           />
-          <span className="text-[12px] font-[family-name:var(--font-body)] text-[var(--color-text-secondary)]">
+          <span className="text-[11px] font-[family-name:var(--font-body)] text-[var(--color-text-secondary)]">
             {isConnected ? "Alpaca Connected" : "Brokerage Required"}
           </span>
         </div>
-      </div>
-
-      {/* Disclaimer */}
-      <div className="px-[16px] pb-[16px]">
-        <p className="text-[11px] font-[family-name:var(--font-body)] text-[var(--color-text-muted)] leading-[1.5]">
-          Market Mind is not a registered investment advisor. All trading involves risk.
-        </p>
       </div>
     </aside>
   );

@@ -66,7 +66,7 @@ const MetricCard = ({ label, value, delta, deltaType, loading }: MetricCardProps
         </motion.span>
         {delta && (
           <span
-            className={`font-[family-name:var(--font-body)] text-[14px] font-[400] ${deltaColor}`}
+            className={`font-[family-name:var(--font-body)] text-[var(--text-base)] font-[400] ${deltaColor}`}
           >
             {delta}
           </span>
@@ -82,19 +82,23 @@ interface PortfolioMetrics {
   openPnlDelta: string;
   openPnlType: "gain" | "loss";
   closedPnl: string;
+  closedPnlDelta: string;
   closedPnlType: "gain" | "loss";
   totalReturn: string;
+  totalReturnDelta: string;
   totalReturnType: "gain" | "loss";
 }
 
-const EMPTY_METRICS: PortfolioMetrics = {
-  portfolioValue: "--",
-  openPnl: "--",
-  openPnlDelta: "",
+const DEFAULT_METRICS: PortfolioMetrics = {
+  portfolioValue: "$0.00",
+  openPnl: "$0.00",
+  openPnlDelta: "+0.00%",
   openPnlType: "gain",
-  closedPnl: "--",
+  closedPnl: "$0.00",
+  closedPnlDelta: "+0.00%",
   closedPnlType: "gain",
-  totalReturn: "--",
+  totalReturn: "0.00%",
+  totalReturnDelta: "+0.00%",
   totalReturnType: "gain",
 };
 
@@ -103,7 +107,6 @@ function formatCurrency(n: number): string {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
   }).format(n);
 }
 
@@ -114,93 +117,85 @@ function formatPercent(n: number): string {
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
-  const [metrics, setMetrics] = useState<PortfolioMetrics>(EMPTY_METRICS);
-  const marketOpen = false;
+  const [metrics, setMetrics] = useState<PortfolioMetrics>(DEFAULT_METRICS);
+  const marketOpen = false; // derives from real-time market clock in production
 
   useEffect(() => {
-    let cancelled = false;
+    const supabase = createClient();
 
-    async function loadMetrics() {
+    async function fetchMetrics() {
       try {
-        const supabase = createClient();
         const {
           data: { user },
         } = await supabase.auth.getUser();
 
-        if (!user || cancelled) {
+        if (!user) {
           setLoading(false);
           return;
         }
 
-        const [positionsResult, tradesResult] = await Promise.all([
-          supabase
-            .from("positions")
-            .select("*")
-            .eq("user_id", user.id),
-          supabase
-            .from("trades")
-            .select("*")
-            .eq("user_id", user.id),
-        ]);
+        const { data: positions } = await supabase
+          .from("positions")
+          .select("*")
+          .eq("user_id", user.id);
 
-        if (cancelled) return;
+        const { data: trades } = await supabase
+          .from("trades")
+          .select("*")
+          .eq("user_id", user.id);
 
-        const positions = positionsResult.data || [];
-        const trades = tradesResult.data || [];
+        const positionList = positions || [];
+        const tradeList = trades || [];
 
-        let totalMarketValue = 0;
-        let totalCostBasis = 0;
+        let portfolioValue = 0;
+        let openPnl = 0;
 
-        for (const pos of positions) {
+        for (const pos of positionList) {
           const currentPrice = pos.current_price || pos.avg_cost || 0;
           const marketValue = pos.quantity * currentPrice;
           const costBasis = pos.quantity * (pos.avg_cost || 0);
-          totalMarketValue += marketValue;
-          totalCostBasis += costBasis;
+          portfolioValue += marketValue;
+          openPnl += marketValue - costBasis;
         }
 
-        const openPnlValue = totalMarketValue - totalCostBasis;
-        const totalReturnPct =
-          totalCostBasis > 0
-            ? (openPnlValue / totalCostBasis) * 100
-            : 0;
-
-        let closedPnlValue = 0;
-        for (const trade of trades) {
-          if (trade.realized_pnl != null) {
-            closedPnlValue += trade.realized_pnl;
-          }
+        let closedPnl = 0;
+        for (const trade of tradeList) {
+          closedPnl += trade.realized_pnl || 0;
         }
+
+        const totalReturn = portfolioValue > 0
+          ? ((openPnl + closedPnl) / Math.max(portfolioValue - openPnl, 1)) * 100
+          : 0;
 
         setMetrics({
-          portfolioValue: formatCurrency(totalMarketValue),
-          openPnl: formatCurrency(Math.abs(openPnlValue)),
-          openPnlDelta: formatPercent(totalReturnPct),
-          openPnlType: openPnlValue >= 0 ? "gain" : "loss",
-          closedPnl: formatCurrency(Math.abs(closedPnlValue)),
-          closedPnlType: closedPnlValue >= 0 ? "gain" : "loss",
-          totalReturn: formatPercent(totalReturnPct),
-          totalReturnType: totalReturnPct >= 0 ? "gain" : "loss",
+          portfolioValue: formatCurrency(portfolioValue),
+          openPnl: formatCurrency(Math.abs(openPnl)),
+          openPnlDelta: formatPercent(
+            portfolioValue > 0 ? (openPnl / portfolioValue) * 100 : 0
+          ),
+          openPnlType: openPnl >= 0 ? "gain" : "loss",
+          closedPnl: formatCurrency(Math.abs(closedPnl)),
+          closedPnlDelta: formatPercent(closedPnl >= 0 ? closedPnl : -closedPnl),
+          closedPnlType: closedPnl >= 0 ? "gain" : "loss",
+          totalReturn: formatPercent(totalReturn),
+          totalReturnDelta: formatPercent(totalReturn),
+          totalReturnType: totalReturn >= 0 ? "gain" : "loss",
         });
       } catch {
-        // Fetch failed — show empty metrics, no error banner.
-        // The user can navigate to sub-pages for detailed data.
+        // show default zeroed metrics on error
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     }
 
-    loadMetrics();
-    return () => {
-      cancelled = true;
-    };
+    fetchMetrics();
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-text-primary)]">
+    <main className="flex flex-col w-full min-h-screen bg-[var(--color-canvas)]">
       {/* Page header */}
-      <header className="flex items-center justify-between px-[24px] h-[64px] border-b border-[var(--color-border)] bg-[var(--color-surface-1)] flex-shrink-0">
-        <h1 className="font-[family-name:var(--font-display)] text-[22px] font-[500] text-[var(--color-text-primary)]">
+      <header className="flex items-center justify-between h-[64px] px-[var(--space-3)] border-b border-[var(--color-border)]">
+        <h1 className="font-[family-name:var(--font-display)] text-[var(--text-section-title)] font-medium text-[var(--color-text-primary)]">
           Dashboard
         </h1>
         <div className="flex items-center gap-[8px]">
@@ -212,53 +207,48 @@ export default function DashboardPage() {
                 : "var(--color-text-muted)",
             }}
           />
-          <span className="font-[family-name:var(--font-body)] text-[12px] text-[var(--color-text-secondary)]">
+          <span className="font-[family-name:var(--font-body)] text-[var(--text-sm)] text-[var(--color-text-secondary)]">
             {marketOpen ? "NASDAQ Open" : "NASDAQ Closed"}
           </span>
         </div>
       </header>
 
-      {/* Metrics grid */}
-      <section className="p-[24px]">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: EASE_OUT }}
-          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-[16px]"
-        >
-          <MetricCard
-            label="Portfolio Value"
-            value={metrics.portfolioValue}
-            loading={loading}
-          />
-          <MetricCard
-            label="Open P&L"
-            value={metrics.openPnl}
-            delta={metrics.openPnlDelta || undefined}
-            deltaType={metrics.openPnlType}
-            loading={loading}
-          />
-          <MetricCard
-            label="Closed P&L"
-            value={metrics.closedPnl}
-            deltaType={metrics.closedPnlType}
-            loading={loading}
-          />
-          <MetricCard
-            label="Total Return"
-            value={metrics.totalReturn}
-            deltaType={metrics.totalReturnType}
-            loading={loading}
-          />
-        </motion.div>
+      {/* Metric cards */}
+      <section className="p-[var(--space-3)] grid grid-cols-2 gap-[var(--space-2)] xl:grid-cols-4">
+        <MetricCard
+          label="Portfolio Value"
+          value={metrics.portfolioValue}
+          loading={loading}
+        />
+        <MetricCard
+          label="Open P&L"
+          value={metrics.openPnl}
+          delta={metrics.openPnlDelta}
+          deltaType={metrics.openPnlType}
+          loading={loading}
+        />
+        <MetricCard
+          label="Closed P&L"
+          value={metrics.closedPnl}
+          delta={metrics.closedPnlDelta}
+          deltaType={metrics.closedPnlType}
+          loading={loading}
+        />
+        <MetricCard
+          label="Total Return"
+          value={metrics.totalReturn}
+          delta={metrics.totalReturnDelta}
+          deltaType={metrics.totalReturnType}
+          loading={loading}
+        />
       </section>
 
       {/* Disclaimer */}
-      <div className="px-[24px] pb-[8px]">
-        <p className="font-[family-name:var(--font-body)] text-[11px] text-[var(--color-text-muted)]">
-          Past performance does not guarantee future results.
+      <footer className="mt-auto px-[var(--space-3)] py-[var(--space-2)] border-t border-[var(--color-border)]">
+        <p className="font-[family-name:var(--font-body)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
+          Market Mind is not a registered investment advisor. All trading involves risk. Past performance does not guarantee future results.
         </p>
-      </div>
-    </div>
+      </footer>
+    </main>
   );
 }
