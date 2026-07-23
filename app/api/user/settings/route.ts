@@ -19,10 +19,35 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    let validatedCap: number | undefined = undefined;
+    if (body.investment_cap !== undefined) {
+      const capValue = body.investment_cap;
+      const numericCap = typeof capValue === 'number' ? capValue : parseFloat(capValue);
+      if (typeof numericCap !== 'number' || isNaN(numericCap)) {
+        return NextResponse.json(
+          { error: "Investment cap must be a valid number" },
+          { status: 400 }
+        );
+      }
+      if (numericCap < 0) {
+        return NextResponse.json(
+          { error: "Investment cap cannot be negative" },
+          { status: 400 }
+        );
+      }
+      if (numericCap > 10_000_000) {
+        return NextResponse.json(
+          { error: "Investment cap cannot exceed $10,000,000" },
+          { status: 400 }
+        );
+      }
+      validatedCap = numericCap;
+    }
+
     const updated = updateUserSettings({
       execution_mode: body.execution_mode,
       risk_level: body.risk_level,
-      investment_cap: body.investment_cap,
+      investment_cap: validatedCap,
     });
 
     return NextResponse.json(updated);
