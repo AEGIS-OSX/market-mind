@@ -13,9 +13,7 @@ const NAV_ITEMS = [
   { label: "Portfolio" },
   { label: "Trade History" },
   { label: "Settings" },
-] as const;
-
-type NavLabel = (typeof NAV_ITEMS)[number]["label"];
+];
 
 const RISK_TIERS = ["Conservative", "Moderate", "Aggressive"] as const;
 type RiskTier = (typeof RISK_TIERS)[number];
@@ -27,13 +25,12 @@ const PORTFOLIO_HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "
 const HISTORY_HEADERS = ["Date", "Ticker", "Action", "Quantity", "Price", "Status", "Rationale"];
 
 export default function Home() {
-  // FIX: activeNav tracks the selected sidebar tab in state. Previously the nav
-  // items were <a href="#"> with a static item.active flag, so clicking a tab
-  // appended /# to the URL and never changed the active tab or the view.
-  const [activeNav, setActiveNav] = useState<NavLabel>("Dashboard");
   const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
   const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
   const [contextOpen, setContextOpen] = useState(true);
+  // FIX: activeNav drives sidebar selection and the header title. Clicking a nav
+  // item updates this state instead of navigating to "#" (no /# appended to URL).
+  const [activeNav, setActiveNav] = useState("Dashboard");
   // FIX: Default to $10,000.00 instead of empty string so trading is not blocked.
   const [investmentCap, setInvestmentCap] = useState("10000");
   // Brokerage connection state — drives "Alpaca Connected" / "Brokerage Required" copy.
@@ -78,8 +75,6 @@ export default function Home() {
         </div>
 
         {/* Nav */}
-        {/* FIX: Tabs are now <button type="button"> wired to setActiveNav. active is
-            derived from activeNav state, not a hardcoded flag. No href, so no /# in URL. */}
         <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
           {NAV_ITEMS.map((item) => {
             const isActive = activeNav === item.label;
@@ -89,7 +84,7 @@ export default function Home() {
                 type="button"
                 onClick={() => setActiveNav(item.label)}
                 aria-current={isActive ? "page" : undefined}
-                className="flex items-center px-[12px] py-[8px] text-left transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
+                className="flex items-center w-full text-left px-[12px] py-[8px] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
                 style={{
                   borderRadius: "var(--radius-panel)",
                   fontSize: "var(--text-sm)",
@@ -97,8 +92,6 @@ export default function Home() {
                   color: isActive ? "var(--color-accent)" : "var(--color-text-secondary)",
                   backgroundColor: isActive ? "rgba(0, 201, 167, 0.08)" : "transparent",
                   border: "none",
-                  cursor: "pointer",
-                  width: "100%",
                 }}
               >
                 {item.label}
@@ -240,7 +233,6 @@ export default function Home() {
 
         {/* Header bar */}
         <header className="flex items-center justify-between px-[24px] py-[16px] border-b border-[var(--color-border)] flex-shrink-0">
-          {/* FIX: header title now reflects the active tab from state. */}
           <h1
             className="font-[family-name:var(--font-display)]"
             style={{ fontSize: "var(--text-xl)", fontWeight: 500, color: "var(--color-text-primary)" }}
