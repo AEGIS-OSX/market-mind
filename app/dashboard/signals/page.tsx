@@ -36,7 +36,7 @@ const getBorderColor = (action: string) => {
 }
 
 export default async function SignalsPage() {
-  const supabase = await createClient()
+  const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     redirect('/login')
