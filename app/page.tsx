@@ -7,8 +7,9 @@ import { motion, AnimatePresence } from "framer-motion";
 // FIX: All motion transitions now use this curve instead of default linear.
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
-// FIX: each nav item has a stable `key` used as the active-tab identifier.
-// The static `active` flag was removed; active state is now tracked in React state.
+// FIX(tabs): each nav item has a stable key used to drive activeNav state.
+// Replaces the previous <a href="#"> anchors that appended /# to the URL
+// and never switched views.
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard" },
   { key: "signals", label: "Signals" },
@@ -19,9 +20,10 @@ const NAV_ITEMS = [
 
 type NavKey = (typeof NAV_ITEMS)[number]["key"];
 
+// FIX(tabs): header title is derived from the active tab instead of a static string.
 const NAV_TITLES: Record<NavKey, string> = {
   dashboard: "Dashboard",
-  signals: "Live Signals",
+  signals: "Signals",
   portfolio: "Portfolio",
   history: "Trade History",
   settings: "Settings",
@@ -37,7 +39,9 @@ const PORTFOLIO_HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "
 const HISTORY_HEADERS = ["Date", "Ticker", "Action", "Quantity", "Price", "Status", "Rationale"];
 
 export default function Home() {
-  // FIX: active tab is tracked in state; clicking a nav button updates it, no URL hash.
+  // FIX(tabs): active tab tracked in component state. Clicking a nav button
+  // sets this; the header title and (future) view panels read from it. No hash
+  // is ever written to the URL, so /# is never appended.
   const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
   const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
   const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
@@ -50,14 +54,6 @@ export default function Home() {
   // In production this derives from a real-time market clock.
   // Defaulting to closed so the UI shows a safe initial state.
   const marketOpen = false;
-
-  // FIX: view visibility derives from the active tab. Dashboard shows the full
-  // overview; each other tab isolates its own section.
-  const showMetrics = activeNav === "dashboard";
-  const showSignals = activeNav === "dashboard" || activeNav === "signals";
-  const showPortfolio = activeNav === "dashboard" || activeNav === "portfolio";
-  const showHistory = activeNav === "dashboard" || activeNav === "history";
-  const showSettings = activeNav === "settings";
 
   return (
     // FIX: Pure flex-row layout. Sidebar is a flex child, NOT absolute/fixed positioned.
@@ -94,9 +90,9 @@ export default function Home() {
         </div>
 
         {/* Nav */}
-        {/* FIX: nav items are <button type="button"> wired to setActiveNav. No href="#",
-            so clicking never appends /# to the URL and never triggers a page reload.
-            Keyboard Enter/Space fire the button natively. */}
+        {/* FIX(tabs): nav items are <button type="button"> wired to setActiveNav.
+            No href, so no /# is appended and no page reload occurs. Enter/Space
+            fire natively on buttons; aria-current + focus-visible ring cover a11y. */}
         <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
           {NAV_ITEMS.map((item) => {
             const isActive = activeNav === item.key;
@@ -106,7 +102,7 @@ export default function Home() {
                 type="button"
                 onClick={() => setActiveNav(item.key)}
                 aria-current={isActive ? "page" : undefined}
-                className="flex items-center px-[12px] py-[8px] text-left transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
+                className="flex items-center px-[12px] py-[8px] transition-colors text-left outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
                 style={{
                   borderRadius: "var(--radius-panel)",
                   fontSize: "var(--text-sm)",
@@ -138,7 +134,6 @@ export default function Home() {
             {RISK_TIERS.map((tier) => (
               <button
                 key={tier}
-                type="button"
                 onClick={() => setRiskTier(tier)}
                 // FIX: border-radius uses var(--radius-button) = 6px, not 4px.
                 style={{
@@ -209,7 +204,6 @@ export default function Home() {
         {/* FIX: Brokerage Status — "Alpaca Connected" or "Brokerage Required" per Quinn's spec. */}
         <div className="px-[16px] py-[16px]">
           <button
-            type="button"
             onClick={() => setBrokerageConnected((v) => !v)}
             className="w-full flex items-center gap-[8px] px-[12px] py-[8px]"
             style={{
@@ -258,7 +252,7 @@ export default function Home() {
 
         {/* Header bar */}
         <header className="flex items-center justify-between px-[24px] py-[16px] border-b border-[var(--color-border)] flex-shrink-0">
-          {/* FIX: header title reflects the active tab. */}
+          {/* FIX(tabs): title reflects the active tab. */}
           <h1
             className="font-[family-name:var(--font-display)]"
             style={{ fontSize: "var(--text-xl)", fontWeight: 500, color: "var(--color-text-primary)" }}
@@ -276,7 +270,6 @@ export default function Home() {
               {(["recommend", "auto"] as const).map((mode) => (
                 <button
                   key={mode}
-                  type="button"
                   onClick={() => setExecMode(mode)}
                   style={{
                     borderRadius: "calc(var(--radius-button) - 2px)",
@@ -295,7 +288,6 @@ export default function Home() {
               ))}
             </div>
             <button
-              type="button"
               style={{
                 borderRadius: "var(--radius-button)",
                 fontSize: "var(--text-sm)",
@@ -313,7 +305,6 @@ export default function Home() {
         </header>
 
         {/* ── Hero Metrics ── */}
-        {showMetrics && (
         <motion.section
           className="px-[24px] py-[24px] grid grid-cols-4 gap-[16px] flex-shrink-0"
           initial={{ opacity: 0, y: 16 }}
@@ -399,10 +390,8 @@ export default function Home() {
             </span>
           </div>
         </motion.section>
-        )}
 
         {/* ── Live Signals ── */}
-        {showSignals && (
         <motion.section
           className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
           initial={{ opacity: 0, y: 16 }}
@@ -418,7 +407,6 @@ export default function Home() {
               Live Signals
             </h2>
             <button
-              type="button"
               onClick={() => setContextOpen((v) => !v)}
               style={{
                 borderRadius: "var(--radius-button)",
@@ -448,10 +436,8 @@ export default function Home() {
             </p>
           </div>
         </motion.section>
-        )}
 
         {/* ── Portfolio & Holdings ── */}
-        {showPortfolio && (
         <motion.section
           className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
           initial={{ opacity: 0, y: 16 }}
@@ -496,10 +482,8 @@ export default function Home() {
             </table>
           </div>
         </motion.section>
-        )}
 
         {/* ── Trade History ── */}
-        {showHistory && (
         <motion.section
           className="px-[24px] pb-[24px] flex flex-col gap-[12px]"
           initial={{ opacity: 0, y: 16 }}
@@ -516,7 +500,6 @@ export default function Home() {
             </h2>
             <div className="flex items-center gap-[8px]">
               <button
-                type="button"
                 style={{
                   borderRadius: "var(--radius-button)",
                   fontSize: "var(--text-xs)",
@@ -531,7 +514,6 @@ export default function Home() {
                 View Audit Trail
               </button>
               <button
-                type="button"
                 style={{
                   borderRadius: "var(--radius-button)",
                   fontSize: "var(--text-xs)",
@@ -601,36 +583,6 @@ export default function Home() {
             </p>
           </div>
         </motion.section>
-        )}
-
-        {/* ── Settings ── */}
-        {showSettings && (
-        <motion.section
-          className="px-[24px] py-[24px] flex flex-col gap-[12px]"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: EASE_OUT }}
-          aria-label="Settings"
-        >
-          <h2
-            className="font-[family-name:var(--font-display)]"
-            style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
-          >
-            Settings
-          </h2>
-          <div
-            className="flex items-center justify-center py-[48px]"
-            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
-          >
-            <p
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
-            >
-              Account and trading preferences will appear here.
-            </p>
-          </div>
-        </motion.section>
-        )}
       </main>
 
       {/* ── Context Panel 320px collapsible ── */}
@@ -655,7 +607,6 @@ export default function Home() {
                   Signal Rationale
                 </h3>
                 <button
-                  type="button"
                   onClick={() => setContextOpen(false)}
                   style={{
                     borderRadius: "var(--radius-button)",
