@@ -28,8 +28,10 @@ export default function Home() {
   const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
   const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
   const [contextOpen, setContextOpen] = useState(true);
-  // FIX: tab navigation — active sidebar item is driven by state, not a hardcoded flag.
-  // Clicking a nav item updates this instead of navigating to "#".
+  // FIX: tab navigation is now state-driven. Clicking a nav item mutates
+  // activeNav instead of navigating to "#". Single-view dashboard: all content
+  // sections remain rendered; the active nav item is highlighted and the header
+  // title follows the active section.
   const [activeNav, setActiveNav] = useState<string>("Dashboard");
   // FIX: Default to $10,000.00 instead of empty string so trading is not blocked.
   const [investmentCap, setInvestmentCap] = useState("10000");
@@ -84,7 +86,7 @@ export default function Home() {
                 type="button"
                 onClick={() => setActiveNav(item.label)}
                 aria-current={isActive ? "page" : undefined}
-                className="flex items-center px-[12px] py-[8px] transition-colors text-left w-full cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
+                className="flex items-center px-[12px] py-[8px] transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
                 style={{
                   borderRadius: "var(--radius-panel)",
                   fontSize: "var(--text-sm)",
@@ -92,6 +94,8 @@ export default function Home() {
                   color: isActive ? "var(--color-accent)" : "var(--color-text-secondary)",
                   backgroundColor: isActive ? "rgba(0, 201, 167, 0.08)" : "transparent",
                   border: "none",
+                  cursor: "pointer",
+                  width: "100%",
                 }}
               >
                 {item.label}
