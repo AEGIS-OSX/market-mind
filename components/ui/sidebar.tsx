@@ -128,6 +128,16 @@ export default function Sidebar() {
             {isConnected ? "Alpaca Connected" : "Brokerage Required"}
           </span>
         </div>
+
+        {/* Sign out: plain form POST so it works without client JS */}
+        <form action="/auth/signout" method="post">
+          <button
+            type="submit"
+            className="w-full py-[6px] text-[11px] font-[family-name:var(--font-body)] font-[500] rounded-[var(--radius-button)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+          >
+            Sign out
+          </button>
+        </form>
       </div>
     </aside>
   );
