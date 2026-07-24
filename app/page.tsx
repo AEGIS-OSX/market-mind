@@ -7,9 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 // FIX: All motion transitions now use this curve instead of default linear.
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
-// FIX(tabs): NAV_ITEMS no longer carries a hardcoded `active` flag. The active
-// tab is tracked in component state (activeNav) so clicks switch views without
-// navigating. Removing the flag is what lets the state drive styling.
 const NAV_ITEMS = [
   { label: "Dashboard" },
   { label: "Signals" },
@@ -31,8 +28,9 @@ export default function Home() {
   const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
   const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
   const [contextOpen, setContextOpen] = useState(true);
-  // FIX(tabs): active sidebar tab tracked in state. Defaults to "Dashboard".
-  const [activeNav, setActiveNav] = useState("Dashboard");
+  // FIX: tab navigation — active sidebar item is driven by state, not a hardcoded flag.
+  // Clicking a nav item updates this instead of navigating to "#".
+  const [activeNav, setActiveNav] = useState<string>("Dashboard");
   // FIX: Default to $10,000.00 instead of empty string so trading is not blocked.
   const [investmentCap, setInvestmentCap] = useState("10000");
   // Brokerage connection state — drives "Alpaca Connected" / "Brokerage Required" copy.
@@ -77,11 +75,6 @@ export default function Home() {
         </div>
 
         {/* Nav */}
-        {/* FIX(tabs): anchors with href="#" replaced by <button type="button">.
-            The old anchors appended /# to the URL on click and never switched
-            the view. Buttons carry no href, call setActiveNav (no reload, no
-            hash), and expose aria-current for assistive tech. Keyboard Enter/
-            Space fire onClick natively via button semantics. */}
         <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
           {NAV_ITEMS.map((item) => {
             const isActive = activeNav === item.label;
@@ -91,7 +84,7 @@ export default function Home() {
                 type="button"
                 onClick={() => setActiveNav(item.label)}
                 aria-current={isActive ? "page" : undefined}
-                className="flex items-center px-[12px] py-[8px] transition-colors text-left"
+                className="flex items-center px-[12px] py-[8px] transition-colors text-left w-full cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
                 style={{
                   borderRadius: "var(--radius-panel)",
                   fontSize: "var(--text-sm)",
@@ -99,8 +92,6 @@ export default function Home() {
                   color: isActive ? "var(--color-accent)" : "var(--color-text-secondary)",
                   backgroundColor: isActive ? "rgba(0, 201, 167, 0.08)" : "transparent",
                   border: "none",
-                  cursor: "pointer",
-                  width: "100%",
                 }}
               >
                 {item.label}
