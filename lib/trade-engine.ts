@@ -1,4 +1,10 @@
-import { getUserSettings } from "./db";
+// Trade decision logic. Pure: settings come in as an argument (read from
+// user_settings by the caller) -- no filesystem, no global store.
+//
+// There is NO brokerage integration (no Alpaca credentials exist). The engine
+// therefore never claims an order was placed with a broker and never invents
+// order ids: in auto mode the caller records the execution decision to the
+// trades table and reports it honestly as a simulated execution.
 
 export interface TradeRecommendation {
   symbol: string;
@@ -7,37 +13,25 @@ export interface TradeRecommendation {
   price?: number;
 }
 
-export interface TradeResult {
-  placed: boolean;
-  orderId?: string;
-  message: string;
-}
+export type TradeDecision =
+  | { action: "recommend_only"; message: string }
+  | { action: "record"; message: string };
 
-export async function executeTrade(
+export function decideTrade(
+  executionMode: "auto" | "recommend",
   recommendation: TradeRecommendation
-): Promise<TradeResult> {
-  const settings = getUserSettings();
+): TradeDecision {
+  const summary = `${recommendation.side} ${recommendation.qty} shares of ${recommendation.symbol}`;
 
-  if (settings.execution_mode === "recommend") {
+  if (executionMode === "recommend") {
     return {
-      placed: false,
-      message: `RECOMMENDATION ONLY: ${recommendation.side} ${recommendation.qty} shares of ${recommendation.symbol}. User has not opted into auto-trading.`,
-    };
-  }
-
-  if (settings.execution_mode === "auto") {
-    const orderId = `order_${Date.now()}_${Math.random()
-      .toString(36)
-      .substring(2, 9)}`;
-    return {
-      placed: true,
-      orderId,
-      message: `Order placed: ${recommendation.side} ${recommendation.qty} shares of ${recommendation.symbol}`,
+      action: "recommend_only",
+      message: `RECOMMENDATION ONLY: ${summary}. User has not opted into auto-trading.`,
     };
   }
 
   return {
-    placed: false,
-    message: "Unknown execution mode",
+    action: "record",
+    message: `Simulated execution recorded: ${summary}. No brokerage is connected -- no live order was placed.`,
   };
 }
