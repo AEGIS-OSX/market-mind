@@ -7,27 +7,16 @@ import { motion, AnimatePresence } from "framer-motion";
 // FIX: All motion transitions now use this curve instead of default linear.
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
-// FIX(tabs): each nav item has a stable key used to drive activeNav state.
-// Replaces the previous <a href="#"> anchors that appended /# to the URL
-// and never switched views.
+// FIX(tabs): NAV_ITEMS no longer carries a hardcoded `active` flag. The active
+// tab is tracked in component state (activeNav) so clicks switch views without
+// navigating. Removing the flag is what lets the state drive styling.
 const NAV_ITEMS = [
-  { key: "dashboard", label: "Dashboard" },
-  { key: "signals", label: "Signals" },
-  { key: "portfolio", label: "Portfolio" },
-  { key: "history", label: "Trade History" },
-  { key: "settings", label: "Settings" },
-] as const;
-
-type NavKey = (typeof NAV_ITEMS)[number]["key"];
-
-// FIX(tabs): header title is derived from the active tab instead of a static string.
-const NAV_TITLES: Record<NavKey, string> = {
-  dashboard: "Dashboard",
-  signals: "Signals",
-  portfolio: "Portfolio",
-  history: "Trade History",
-  settings: "Settings",
-};
+  { label: "Dashboard" },
+  { label: "Signals" },
+  { label: "Portfolio" },
+  { label: "Trade History" },
+  { label: "Settings" },
+];
 
 const RISK_TIERS = ["Conservative", "Moderate", "Aggressive"] as const;
 type RiskTier = (typeof RISK_TIERS)[number];
@@ -39,13 +28,11 @@ const PORTFOLIO_HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "
 const HISTORY_HEADERS = ["Date", "Ticker", "Action", "Quantity", "Price", "Status", "Rationale"];
 
 export default function Home() {
-  // FIX(tabs): active tab tracked in component state. Clicking a nav button
-  // sets this; the header title and (future) view panels read from it. No hash
-  // is ever written to the URL, so /# is never appended.
-  const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
   const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
   const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
   const [contextOpen, setContextOpen] = useState(true);
+  // FIX(tabs): active sidebar tab tracked in state. Defaults to "Dashboard".
+  const [activeNav, setActiveNav] = useState("Dashboard");
   // FIX: Default to $10,000.00 instead of empty string so trading is not blocked.
   const [investmentCap, setInvestmentCap] = useState("10000");
   // Brokerage connection state — drives "Alpaca Connected" / "Brokerage Required" copy.
@@ -90,19 +77,21 @@ export default function Home() {
         </div>
 
         {/* Nav */}
-        {/* FIX(tabs): nav items are <button type="button"> wired to setActiveNav.
-            No href, so no /# is appended and no page reload occurs. Enter/Space
-            fire natively on buttons; aria-current + focus-visible ring cover a11y. */}
+        {/* FIX(tabs): anchors with href="#" replaced by <button type="button">.
+            The old anchors appended /# to the URL on click and never switched
+            the view. Buttons carry no href, call setActiveNav (no reload, no
+            hash), and expose aria-current for assistive tech. Keyboard Enter/
+            Space fire onClick natively via button semantics. */}
         <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
           {NAV_ITEMS.map((item) => {
-            const isActive = activeNav === item.key;
+            const isActive = activeNav === item.label;
             return (
               <button
-                key={item.key}
+                key={item.label}
                 type="button"
-                onClick={() => setActiveNav(item.key)}
+                onClick={() => setActiveNav(item.label)}
                 aria-current={isActive ? "page" : undefined}
-                className="flex items-center px-[12px] py-[8px] transition-colors text-left outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
+                className="flex items-center px-[12px] py-[8px] transition-colors text-left"
                 style={{
                   borderRadius: "var(--radius-panel)",
                   fontSize: "var(--text-sm)",
@@ -111,6 +100,7 @@ export default function Home() {
                   backgroundColor: isActive ? "rgba(0, 201, 167, 0.08)" : "transparent",
                   border: "none",
                   cursor: "pointer",
+                  width: "100%",
                 }}
               >
                 {item.label}
@@ -252,12 +242,11 @@ export default function Home() {
 
         {/* Header bar */}
         <header className="flex items-center justify-between px-[24px] py-[16px] border-b border-[var(--color-border)] flex-shrink-0">
-          {/* FIX(tabs): title reflects the active tab. */}
           <h1
             className="font-[family-name:var(--font-display)]"
             style={{ fontSize: "var(--text-xl)", fontWeight: 500, color: "var(--color-text-primary)" }}
           >
-            {NAV_TITLES[activeNav]}
+            {activeNav}
           </h1>
           <div className="flex items-center gap-[12px]">
             {/* Execution mode toggle */}
