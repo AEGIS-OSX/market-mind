@@ -7,13 +7,16 @@ import { motion, AnimatePresence } from "framer-motion";
 // FIX: All motion transitions now use this curve instead of default linear.
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
+// FIX: each nav item carries a stable lowercase tab key used by activeTab state.
 const NAV_ITEMS = [
-  { label: "Dashboard", active: true },
-  { label: "Signals" },
-  { label: "Portfolio" },
-  { label: "Trade History" },
-  { label: "Settings" },
-];
+  { label: "Dashboard", key: "dashboard" },
+  { label: "Signals", key: "signals" },
+  { label: "Portfolio", key: "portfolio" },
+  { label: "Trade History", key: "history" },
+  { label: "Settings", key: "settings" },
+] as const;
+
+type TabKey = (typeof NAV_ITEMS)[number]["key"];
 
 const RISK_TIERS = ["Conservative", "Moderate", "Aggressive"] as const;
 type RiskTier = (typeof RISK_TIERS)[number];
@@ -25,6 +28,8 @@ const PORTFOLIO_HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "
 const HISTORY_HEADERS = ["Date", "Ticker", "Action", "Quantity", "Price", "Status", "Rationale"];
 
 export default function Home() {
+  // FIX: activeTab drives which panel is visible and which nav trigger is styled active.
+  const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
   const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
   const [contextOpen, setContextOpen] = useState(true);
@@ -36,6 +41,9 @@ export default function Home() {
   // In production this derives from a real-time market clock.
   // Defaulting to closed so the UI shows a safe initial state.
   const marketOpen = false;
+
+  // FIX: header title reflects the active tab.
+  const activeLabel = NAV_ITEMS.find((i) => i.key === activeTab)?.label ?? "Dashboard";
 
   return (
     // FIX: Pure flex-row layout. Sidebar is a flex child, NOT absolute/fixed positioned.
@@ -73,22 +81,29 @@ export default function Home() {
 
         {/* Nav */}
         <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
-          {NAV_ITEMS.map((item) => (
-            <a
-              key={item.label}
-              href="#"
-              className="flex items-center px-[12px] py-[8px] transition-colors"
-              style={{
-                borderRadius: "var(--radius-panel)",
-                fontSize: "var(--text-sm)",
-                fontWeight: item.active ? 500 : 400,
-                color: item.active ? "var(--color-accent)" : "var(--color-text-secondary)",
-                backgroundColor: item.active ? "rgba(0, 201, 167, 0.08)" : "transparent",
-              }}
-            >
-              {item.label}
-            </a>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const isActive = activeTab === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setActiveTab(item.key)}
+                aria-current={isActive ? "page" : undefined}
+                className="flex items-center px-[12px] py-[8px] transition-colors text-left w-full"
+                style={{
+                  borderRadius: "var(--radius-panel)",
+                  fontSize: "var(--text-sm)",
+                  fontWeight: isActive ? 500 : 400,
+                  color: isActive ? "var(--color-accent)" : "var(--color-text-secondary)",
+                  backgroundColor: isActive ? "rgba(0, 201, 167, 0.08)" : "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
 
         {/* Divider */}
@@ -106,6 +121,7 @@ export default function Home() {
             {RISK_TIERS.map((tier) => (
               <button
                 key={tier}
+                type="button"
                 onClick={() => setRiskTier(tier)}
                 // FIX: border-radius uses var(--radius-button) = 6px, not 4px.
                 style={{
@@ -176,6 +192,7 @@ export default function Home() {
         {/* FIX: Brokerage Status — "Alpaca Connected" or "Brokerage Required" per Quinn's spec. */}
         <div className="px-[16px] py-[16px]">
           <button
+            type="button"
             onClick={() => setBrokerageConnected((v) => !v)}
             className="w-full flex items-center gap-[8px] px-[12px] py-[8px]"
             style={{
@@ -228,7 +245,7 @@ export default function Home() {
             className="font-[family-name:var(--font-display)]"
             style={{ fontSize: "var(--text-xl)", fontWeight: 500, color: "var(--color-text-primary)" }}
           >
-            Dashboard
+            {activeLabel}
           </h1>
           <div className="flex items-center gap-[12px]">
             {/* Execution mode toggle */}
@@ -241,6 +258,7 @@ export default function Home() {
               {(["recommend", "auto"] as const).map((mode) => (
                 <button
                   key={mode}
+                  type="button"
                   onClick={() => setExecMode(mode)}
                   style={{
                     borderRadius: "calc(var(--radius-button) - 2px)",
@@ -259,6 +277,7 @@ export default function Home() {
               ))}
             </div>
             <button
+              type="button"
               style={{
                 borderRadius: "var(--radius-button)",
                 fontSize: "var(--text-sm)",
@@ -275,7 +294,8 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ── Hero Metrics ── */}
+        {/* ── Hero Metrics (Dashboard tab) ── */}
+        {activeTab === "dashboard" && (
         <motion.section
           className="px-[24px] py-[24px] grid grid-cols-4 gap-[16px] flex-shrink-0"
           initial={{ opacity: 0, y: 16 }}
@@ -361,8 +381,10 @@ export default function Home() {
             </span>
           </div>
         </motion.section>
+        )}
 
-        {/* ── Live Signals ── */}
+        {/* ── Live Signals (Dashboard + Signals tabs) ── */}
+        {(activeTab === "dashboard" || activeTab === "signals") && (
         <motion.section
           className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
           initial={{ opacity: 0, y: 16 }}
@@ -378,6 +400,7 @@ export default function Home() {
               Live Signals
             </h2>
             <button
+              type="button"
               onClick={() => setContextOpen((v) => !v)}
               style={{
                 borderRadius: "var(--radius-button)",
@@ -407,8 +430,10 @@ export default function Home() {
             </p>
           </div>
         </motion.section>
+        )}
 
-        {/* ── Portfolio & Holdings ── */}
+        {/* ── Portfolio & Holdings (Dashboard + Portfolio tabs) ── */}
+        {(activeTab === "dashboard" || activeTab === "portfolio") && (
         <motion.section
           className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
           initial={{ opacity: 0, y: 16 }}
@@ -453,8 +478,10 @@ export default function Home() {
             </table>
           </div>
         </motion.section>
+        )}
 
-        {/* ── Trade History ── */}
+        {/* ── Trade History (Dashboard + Trade History tabs) ── */}
+        {(activeTab === "dashboard" || activeTab === "history") && (
         <motion.section
           className="px-[24px] pb-[24px] flex flex-col gap-[12px]"
           initial={{ opacity: 0, y: 16 }}
@@ -471,6 +498,7 @@ export default function Home() {
             </h2>
             <div className="flex items-center gap-[8px]">
               <button
+                type="button"
                 style={{
                   borderRadius: "var(--radius-button)",
                   fontSize: "var(--text-xs)",
@@ -485,6 +513,7 @@ export default function Home() {
                 View Audit Trail
               </button>
               <button
+                type="button"
                 style={{
                   borderRadius: "var(--radius-button)",
                   fontSize: "var(--text-xs)",
@@ -554,6 +583,36 @@ export default function Home() {
             </p>
           </div>
         </motion.section>
+        )}
+
+        {/* ── Settings (Settings tab) ── */}
+        {activeTab === "settings" && (
+        <motion.section
+          className="px-[24px] py-[24px] flex flex-col gap-[12px]"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE_OUT }}
+          aria-label="Settings"
+        >
+          <h2
+            className="font-[family-name:var(--font-display)]"
+            style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
+          >
+            Settings
+          </h2>
+          <div
+            className="flex items-center justify-center py-[48px]"
+            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+          >
+            <p
+              className="font-[family-name:var(--font-body)]"
+              style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
+            >
+              Adjust risk tolerance and investment cap in the sidebar.
+            </p>
+          </div>
+        </motion.section>
+        )}
       </main>
 
       {/* ── Context Panel 320px collapsible ── */}
@@ -578,6 +637,7 @@ export default function Home() {
                   Signal Rationale
                 </h3>
                 <button
+                  type="button"
                   onClick={() => setContextOpen(false)}
                   style={{
                     borderRadius: "var(--radius-button)",
