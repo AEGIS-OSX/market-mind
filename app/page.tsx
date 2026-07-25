@@ -8,11 +8,11 @@ import { motion, AnimatePresence } from "framer-motion";
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
 const NAV_ITEMS = [
-  { label: "Dashboard", active: true },
-  { label: "Signals" },
-  { label: "Portfolio" },
-  { label: "Trade History" },
-  { label: "Settings" },
+  { key: "dashboard", label: "Dashboard" },
+  { key: "signals", label: "Signals" },
+  { key: "portfolio", label: "Portfolio" },
+  { key: "trade-history", label: "Trade History" },
+  { key: "settings", label: "Settings" },
 ];
 
 const RISK_TIERS = ["Conservative", "Moderate", "Aggressive"] as const;
@@ -25,6 +25,9 @@ const PORTFOLIO_HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "
 const HISTORY_HEADERS = ["Date", "Ticker", "Action", "Quantity", "Price", "Status", "Rationale"];
 
 export default function Home() {
+  // FIX: activeNav drives sidebar active state and header title. Replaces the
+  // static NAV_ITEMS[].active flag so tabs actually switch on click.
+  const [activeNav, setActiveNav] = useState<string>("dashboard");
   const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
   const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
   const [contextOpen, setContextOpen] = useState(true);
@@ -32,6 +35,9 @@ export default function Home() {
   const [investmentCap, setInvestmentCap] = useState("10000");
   // Brokerage connection state — drives "Alpaca Connected" / "Brokerage Required" copy.
   const [brokerageConnected, setBrokerageConnected] = useState(false);
+
+  const activeLabel =
+    NAV_ITEMS.find((item) => item.key === activeNav)?.label ?? "Dashboard";
 
   // In production this derives from a real-time market clock.
   // Defaulting to closed so the UI shows a safe initial state.
@@ -72,23 +78,33 @@ export default function Home() {
         </div>
 
         {/* Nav */}
+        {/* FIX: Anchor tabs (href="#", which appended /# to the URL and never switched
+            panels) replaced with <button type="button"> wired to setActiveNav. Active
+            style now derives from activeNav state, not a static flag. */}
         <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
-          {NAV_ITEMS.map((item) => (
-            <a
-              key={item.label}
-              href="#"
-              className="flex items-center px-[12px] py-[8px] transition-colors"
-              style={{
-                borderRadius: "var(--radius-panel)",
-                fontSize: "var(--text-sm)",
-                fontWeight: item.active ? 500 : 400,
-                color: item.active ? "var(--color-accent)" : "var(--color-text-secondary)",
-                backgroundColor: item.active ? "rgba(0, 201, 167, 0.08)" : "transparent",
-              }}
-            >
-              {item.label}
-            </a>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const isActive = activeNav === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setActiveNav(item.key)}
+                aria-current={isActive ? "page" : undefined}
+                className="flex items-center px-[12px] py-[8px] transition-colors text-left w-full focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
+                style={{
+                  borderRadius: "var(--radius-panel)",
+                  fontSize: "var(--text-sm)",
+                  fontWeight: isActive ? 500 : 400,
+                  color: isActive ? "var(--color-accent)" : "var(--color-text-secondary)",
+                  backgroundColor: isActive ? "rgba(0, 201, 167, 0.08)" : "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
 
         {/* Divider */}
@@ -224,11 +240,12 @@ export default function Home() {
 
         {/* Header bar */}
         <header className="flex items-center justify-between px-[24px] py-[16px] border-b border-[var(--color-border)] flex-shrink-0">
+          {/* FIX: Header title follows the active nav item instead of a hardcoded string. */}
           <h1
             className="font-[family-name:var(--font-display)]"
             style={{ fontSize: "var(--text-xl)", fontWeight: 500, color: "var(--color-text-primary)" }}
           >
-            Dashboard
+            {activeLabel}
           </h1>
           <div className="flex items-center gap-[12px]">
             {/* Execution mode toggle */}
