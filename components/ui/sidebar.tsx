@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useUserSettings } from "@/lib/store/userSettings";
 
 const NAV_LINKS = [
   { name: "Dashboard", href: "/dashboard" },
@@ -12,15 +13,34 @@ const NAV_LINKS = [
   { name: "Settings", href: "/dashboard/settings" },
 ];
 
-const RISK_TIERS = ["Conservative", "Moderate", "Aggressive"];
+const RISK_TIERS = [
+  { label: "Conservative", value: "conservative" },
+  { label: "Moderate", value: "moderate" },
+  { label: "Aggressive", value: "aggressive" },
+] as const;
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [risk, setRisk] = useState("Moderate");
-  const [investmentCap, setInvestmentCap] = useState("");
-  // No brokerage integration exists -- never render a fabricated
-  // "Alpaca Connected" status. Flips when a real integration lands.
-  const isConnected = false;
+  // T-010: risk tolerance reads from and writes to the Zustand store.
+  const riskLevel = useUserSettings((s) => s.riskLevel);
+  const setRiskLevel = useUserSettings((s) => s.setRiskLevel);
+  const investmentCap = useUserSettings((s) => s.investmentCap);
+  const setInvestmentCap = useUserSettings((s) => s.setInvestmentCap);
+  const hydrate = useUserSettings((s) => s.hydrate);
+
+  const [capDraft, setCapDraft] = useState<string>("");
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+  useEffect(() => {
+    setCapDraft(investmentCap > 0 ? String(investmentCap) : "");
+  }, [investmentCap]);
+
+  const commitCap = () => {
+    const n = Number(capDraft.replace(/[$,]/g, ""));
+    if (Number.isFinite(n) && n >= 0) setInvestmentCap(n);
+  };
 
   return (
     <aside
@@ -30,7 +50,6 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-[16px] py-[20px] border-b border-[var(--color-border)]">
         <div className="flex items-center gap-[10px]">
-          {/* MM logo mark: 28x28, accent bg, accent-ink text */}
           <div
             className="w-[28px] h-[28px] flex items-center justify-center flex-shrink-0 rounded-[var(--radius-sm)]"
             style={{ backgroundColor: "var(--color-accent)" }}
@@ -48,7 +67,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Navigation */}
+      {/* Navigation — active state via usePathname (T-010) */}
       <nav aria-label="Main navigation" className="flex flex-col pt-[8px]">
         {NAV_LINKS.map((link) => {
           const isActive = pathname === link.href;
@@ -56,6 +75,7 @@ export default function Sidebar() {
             <Link
               key={link.href}
               href={link.href}
+              aria-current={isActive ? "page" : undefined}
               className={`flex items-center px-[16px] py-[10px] font-[family-name:var(--font-body)] text-[var(--text-sm)] transition-colors
                 ${
                   isActive
@@ -82,15 +102,15 @@ export default function Sidebar() {
           >
             {RISK_TIERS.map((tier) => (
               <button
-                key={tier}
-                onClick={() => setRisk(tier)}
+                key={tier.value}
+                onClick={() => setRiskLevel(tier.value)}
                 className={`flex-1 py-[6px] text-[11px] font-[family-name:var(--font-body)] font-[500] rounded-[var(--radius-button)] transition-colors ${
-                  risk === tier
+                  riskLevel === tier.value
                     ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
                     : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                 }`}
               >
-                {tier.slice(0, 3)}
+                {tier.label.slice(0, 3)}
               </button>
             ))}
           </div>
@@ -101,7 +121,7 @@ export default function Sidebar() {
           <label
             htmlFor="investment-cap"
             className="text-[11px] font-[400] text-[var(--color-text-muted)] uppercase tracking-[0.08em]"
-            title="The maximum dollar amount Market Mind is authorized to manage."
+            title="The maximum dollar amount Market Mind is authorized to deploy."
           >
             Investment Cap
           </label>
@@ -109,25 +129,22 @@ export default function Sidebar() {
             id="investment-cap"
             type="text"
             inputMode="decimal"
-            value={investmentCap}
-            onChange={(e) => setInvestmentCap(e.target.value)}
-            placeholder="$0.00"
+            value={capDraft}
+            onChange={(e) => setCapDraft(e.target.value)}
+            onBlur={commitCap}
+            placeholder="No cap"
             className="w-full bg-[var(--color-surface-3)] border border-[var(--color-border)] rounded-[var(--radius-button)] px-[10px] py-[6px] text-[var(--text-sm)] font-[family-name:var(--font-body)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
           />
         </div>
 
-        {/* Brokerage Status */}
+        {/* Account model — honest: simulated funds, no brokerage exists */}
         <div className="flex items-center gap-[8px]">
           <span
             className="w-[6px] h-[6px] rounded-full flex-shrink-0"
-            style={{
-              backgroundColor: isConnected
-                ? "var(--color-gain)"
-                : "var(--color-loss)",
-            }}
+            style={{ backgroundColor: "var(--color-accent)" }}
           />
           <span className="text-[11px] font-[family-name:var(--font-body)] text-[var(--color-text-secondary)]">
-            {isConnected ? "Alpaca Connected" : "Brokerage Required"}
+            Simulated portfolio — real prices
           </span>
         </div>
 

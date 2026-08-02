@@ -1,610 +1,143 @@
 "use client";
 
-import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
 
-// Ease curve matching var(--ease-out): cubic-bezier(0.16, 1, 0.3, 1)
-// FIX: All motion transitions now use this curve instead of default linear.
-const EASE_OUT = [0.16, 1, 0.3, 1] as const;
+// Logged-out landing page. The old version here was a full static dashboard
+// mock with hardcoded $0.00 metrics that read as live data (audit defect K).
+// A logged-out page must not display figures that look like live metrics, so
+// this page shows NO numbers at all — the only dynamic element is the real
+// market session state from /api/market/clock (public, unpriced).
 
-const NAV_ITEMS = [
-  { label: "Dashboard", active: true },
-  { label: "Signals" },
-  { label: "Portfolio" },
-  { label: "Trade History" },
-  { label: "Settings" },
+interface Clock {
+  open: boolean;
+  label: string;
+}
+
+const FEATURES = [
+  {
+    title: "Real market data",
+    body: "Live NASDAQ quotes and daily history from real public feeds. Every price on screen shows its source and as-of timestamp.",
+  },
+  {
+    title: "Transparent signals",
+    body: "One stated rule — SMA 20/50 crossover on daily closes — computed from fetched bars. The math is shown next to every signal. No opaque scores.",
+  },
+  {
+    title: "Simulated portfolio",
+    body: "Orders fill at the real last price into a simulated account. Real market prices, simulated funds — always labelled, never implied to be real money.",
+  },
 ];
 
-const RISK_TIERS = ["Conservative", "Moderate", "Aggressive"] as const;
-type RiskTier = (typeof RISK_TIERS)[number];
+export default function LandingPage() {
+  const [clock, setClock] = useState<Clock | null>(null);
 
-// Section 5 — Portfolio & Holdings Table headers (unchanged from spec)
-const PORTFOLIO_HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "P&L", "Value"];
-
-// FIX: Section 6 — Trade History headers now include "Status" and "Rationale" per Quinn's spec.
-const HISTORY_HEADERS = ["Date", "Ticker", "Action", "Quantity", "Price", "Status", "Rationale"];
-
-export default function Home() {
-  const [riskTier, setRiskTier] = useState<RiskTier>("Moderate");
-  const [execMode, setExecMode] = useState<"auto" | "recommend">("recommend");
-  const [contextOpen, setContextOpen] = useState(true);
-  // FIX: Default to $10,000.00 instead of empty string so trading is not blocked.
-  const [investmentCap, setInvestmentCap] = useState("10000");
-  // Brokerage connection state — drives "Alpaca Connected" / "Brokerage Required" copy.
-  const [brokerageConnected, setBrokerageConnected] = useState(false);
-
-  // In production this derives from a real-time market clock.
-  // Defaulting to closed so the UI shows a safe initial state.
-  const marketOpen = false;
+  useEffect(() => {
+    let mounted = true;
+    fetch("/api/market/clock")
+      .then((r) => r.json())
+      .then((c) => mounted && setClock(c))
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
-    // FIX: Pure flex-row layout. Sidebar is a flex child, NOT absolute/fixed positioned.
-    // min-w-0 on main prevents flex overflow from clipping the hero metric card.
-    <div className="flex flex-row h-screen overflow-hidden bg-[var(--color-canvas)] text-[var(--color-text-primary)]">
-
-      {/* ── Sidebar 240px fixed-width flex child ── */}
-      <aside
-        className="w-[240px] flex-shrink-0 bg-[var(--color-surface-1)] border-r border-[var(--color-border)] flex flex-col"
-        aria-label="Primary navigation"
-      >
-        {/* Logo */}
-        <div className="px-[16px] py-[20px] border-b border-[var(--color-border)]">
-          <div className="flex items-center gap-[10px]">
-            <div
-              className="w-[28px] h-[28px] flex items-center justify-center flex-shrink-0"
-              style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-accent)" }}
-              aria-hidden="true"
+    <main className="min-h-screen bg-[var(--color-canvas)] flex flex-col">
+      {/* Top bar */}
+      <header className="flex items-center justify-between px-[var(--space-3)] h-[64px] border-b border-[var(--color-border)]">
+        <div className="flex items-center gap-[10px]">
+          <div
+            className="w-[28px] h-[28px] flex items-center justify-center rounded-[var(--radius-sm)]"
+            style={{ backgroundColor: "var(--color-accent)" }}
+          >
+            <span
+              className="font-[family-name:var(--font-display)] text-[11px] font-[700] leading-none select-none"
+              style={{ color: "var(--color-accent-ink)" }}
             >
+              MM
+            </span>
+          </div>
+          <span className="font-[family-name:var(--font-display)] text-[16px] font-[600] text-[var(--color-text-primary)]">
+            Market Mind
+          </span>
+        </div>
+        <div className="flex items-center gap-[16px]">
+          {clock && (
+            <span className="hidden sm:flex items-center gap-[8px]">
               <span
-                className="font-[family-name:var(--font-display)]"
-                style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-accent-ink)", lineHeight: 1 }}
-              >
-                MM
+                className="w-[6px] h-[6px] rounded-full"
+                style={{ backgroundColor: clock.open ? "var(--color-gain)" : "var(--color-text-muted)" }}
+              />
+              <span className="font-[family-name:var(--font-body)] text-[var(--text-sm)] text-[var(--color-text-secondary)]">
+                {clock.label}
               </span>
-            </div>
-            <span
-              className="font-[family-name:var(--font-display)]"
-              style={{ fontSize: "var(--text-lg)", fontWeight: 600, color: "var(--color-text-primary)" }}
-            >
-              Market Mind
             </span>
-          </div>
-        </div>
-
-        {/* Nav */}
-        <nav className="px-[8px] py-[12px] flex flex-col gap-[2px]" aria-label="Main">
-          {NAV_ITEMS.map((item) => (
-            <a
-              key={item.label}
-              href="#"
-              className="flex items-center px-[12px] py-[8px] transition-colors"
-              style={{
-                borderRadius: "var(--radius-panel)",
-                fontSize: "var(--text-sm)",
-                fontWeight: item.active ? 500 : 400,
-                color: item.active ? "var(--color-accent)" : "var(--color-text-secondary)",
-                backgroundColor: item.active ? "rgba(0, 201, 167, 0.08)" : "transparent",
-              }}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-
-        {/* Divider */}
-        <div className="mx-[16px] border-t border-[var(--color-border)]" />
-
-        {/* Risk Tolerance */}
-        <div className="px-[16px] py-[16px] flex flex-col gap-[8px]">
-          <label
-            className="font-[family-name:var(--font-body)]"
-            style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
+          )}
+          <Link
+            href="/login"
+            className="px-[16px] py-[8px] text-[var(--text-sm)] font-[family-name:var(--font-body)] font-[500] rounded-[var(--radius-button)] transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-ink)" }}
           >
-            Risk Tolerance
-          </label>
-          <div className="flex flex-col gap-[4px]">
-            {RISK_TIERS.map((tier) => (
-              <button
-                key={tier}
-                onClick={() => setRiskTier(tier)}
-                // FIX: border-radius uses var(--radius-button) = 6px, not 4px.
-                style={{
-                  borderRadius: "var(--radius-button)",
-                  fontSize: "var(--text-sm)",
-                  fontWeight: riskTier === tier ? 500 : 400,
-                  color: riskTier === tier ? "var(--color-accent-ink)" : "var(--color-text-secondary)",
-                  backgroundColor: riskTier === tier ? "var(--color-accent)" : "transparent",
-                  border: riskTier === tier ? "none" : "1px solid var(--color-border)",
-                  padding: "6px 12px",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: `background-color var(--duration-fast)`,
-                }}
-              >
-                {tier}
-              </button>
-            ))}
-          </div>
+            Sign in
+          </Link>
         </div>
+      </header>
 
-        {/* Investment Cap */}
-        <div className="px-[16px] pb-[16px] flex flex-col gap-[8px]">
-          <label
-            htmlFor="investment-cap"
-            className="font-[family-name:var(--font-body)]"
-            style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
+      {/* Hero */}
+      <section className="flex flex-col items-start px-[var(--space-3)] pt-[var(--space-6)] pb-[var(--space-5)] max-w-[860px]">
+        <h1 className="font-[family-name:var(--font-display)] text-[var(--text-4xl)] font-[600] text-[var(--color-text-primary)] leading-[1.15]">
+          A trading terminal that never invents a number.
+        </h1>
+        <p className="mt-[var(--space-2)] font-[family-name:var(--font-body)] text-[var(--text-lg)] text-[var(--color-text-secondary)] leading-[1.6]">
+          Market Mind watches NASDAQ with real market data, computes transparent
+          signals from a stated rule, and manages a simulated portfolio filled at
+          real prices. Every figure carries its source and timestamp — or it
+          isn&apos;t shown.
+        </p>
+        <div className="mt-[var(--space-3)] flex gap-[12px]">
+          <Link
+            href="/signup"
+            className="px-[20px] py-[10px] text-[var(--text-base)] font-[family-name:var(--font-body)] font-[500] rounded-[var(--radius-button)] transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-ink)" }}
           >
-            Investment Cap
-          </label>
-          <div className="relative">
-            <span
-              className="absolute left-[10px] top-1/2 -translate-y-1/2 font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}
-              aria-hidden="true"
-            >
-              $
-            </span>
-            <input
-              id="investment-cap"
-              type="number"
-              min="0"
-              step="100"
-              value={investmentCap}
-              onChange={(e) => setInvestmentCap(e.target.value)}
-              placeholder="0.00"
-              className="w-full pl-[22px] pr-[10px] py-[8px] font-[family-name:var(--font-body)] outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
-              style={{
-                borderRadius: "var(--radius-panel)",
-                fontSize: "var(--text-sm)",
-                color: "var(--color-text-primary)",
-                backgroundColor: "var(--color-surface-3)",
-                border: "1px solid var(--color-border)",
-              }}
-            />
-          </div>
-          <p
-            className="font-[family-name:var(--font-body)]"
-            style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
+            Create an account
+          </Link>
+          <Link
+            href="/login"
+            className="px-[20px] py-[10px] text-[var(--text-base)] font-[family-name:var(--font-body)] font-[500] rounded-[var(--radius-button)] bg-[var(--color-surface-2)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-1)] transition-colors border border-[var(--color-border)]"
           >
-            Available Capital
-          </p>
+            Sign in
+          </Link>
         </div>
+      </section>
 
-        {/* Divider */}
-        <div className="mx-[16px] border-t border-[var(--color-border)]" />
-
-        {/* FIX: Brokerage Status — "Alpaca Connected" or "Brokerage Required" per Quinn's spec. */}
-        <div className="px-[16px] py-[16px]">
-          <button
-            onClick={() => setBrokerageConnected((v) => !v)}
-            className="w-full flex items-center gap-[8px] px-[12px] py-[8px]"
-            style={{
-              borderRadius: "var(--radius-button)",
-              fontSize: "var(--text-sm)",
-              fontWeight: 500,
-              color: brokerageConnected ? "var(--color-gain)" : "var(--color-alert)",
-              backgroundColor: brokerageConnected ? "rgba(34, 197, 94, 0.08)" : "rgba(245, 158, 11, 0.08)",
-              border: "none",
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-          >
-            <span
-              className="w-[6px] h-[6px] rounded-full flex-shrink-0"
-              style={{ backgroundColor: brokerageConnected ? "var(--color-gain)" : "var(--color-alert)" }}
-              aria-hidden="true"
-            />
-            {brokerageConnected ? "Alpaca Connected" : "Brokerage Required"}
-          </button>
-        </div>
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* FIX: Market Status — "NASDAQ Open" / "NASDAQ Closed" using marketOpen boolean. */}
-        <div className="px-[16px] py-[16px] border-t border-[var(--color-border)]">
-          <div className="flex items-center gap-[8px]">
-            <span
-              className="w-[6px] h-[6px] rounded-full flex-shrink-0"
-              style={{ backgroundColor: marketOpen ? "var(--color-gain)" : "var(--color-text-muted)" }}
-              aria-hidden="true"
-            />
-            <span
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: marketOpen ? "var(--color-gain)" : "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}
-            >
-              {marketOpen ? "NASDAQ Open" : "NASDAQ Closed"}
-            </span>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── Main content — flex-1 min-w-0 prevents hero metric from being clipped ── */}
-      <main className="flex-1 min-w-0 overflow-auto flex flex-col" aria-label="Dashboard">
-
-        {/* Header bar */}
-        <header className="flex items-center justify-between px-[24px] py-[16px] border-b border-[var(--color-border)] flex-shrink-0">
-          <h1
-            className="font-[family-name:var(--font-display)]"
-            style={{ fontSize: "var(--text-xl)", fontWeight: 500, color: "var(--color-text-primary)" }}
-          >
-            Dashboard
-          </h1>
-          <div className="flex items-center gap-[12px]">
-            {/* Execution mode toggle */}
-            <div
-              className="flex items-center gap-[2px] p-[2px]"
-              style={{ borderRadius: "var(--radius-button)", backgroundColor: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}
-              role="group"
-              aria-label="Execution mode"
-            >
-              {(["recommend", "auto"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setExecMode(mode)}
-                  style={{
-                    borderRadius: "calc(var(--radius-button) - 2px)",
-                    fontSize: "var(--text-xs)",
-                    fontWeight: execMode === mode ? 500 : 400,
-                    color: execMode === mode ? "var(--color-accent-ink)" : "var(--color-text-secondary)",
-                    backgroundColor: execMode === mode ? "var(--color-accent)" : "transparent",
-                    border: "none",
-                    padding: "6px 12px",
-                    cursor: "pointer",
-                    transition: `background-color var(--duration-fast)`,
-                  }}
-                >
-                  {mode === "recommend" ? "Recommend only" : "Auto-trade"}
-                </button>
-              ))}
-            </div>
-            <button
-              style={{
-                borderRadius: "var(--radius-button)",
-                fontSize: "var(--text-sm)",
-                fontWeight: 500,
-                color: "var(--color-text-secondary)",
-                backgroundColor: "transparent",
-                border: "1px solid var(--color-border)",
-                padding: "6px 16px",
-                cursor: "pointer",
-              }}
-            >
-              Account
-            </button>
-          </div>
-        </header>
-
-        {/* ── Hero Metrics ── */}
-        <motion.section
-          className="px-[24px] py-[24px] grid grid-cols-4 gap-[16px] flex-shrink-0"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          // FIX: ease-out cubic-bezier applied to all motion transitions.
-          transition={{ duration: 0.4, ease: EASE_OUT }}
-          aria-label="Portfolio metrics"
-        >
-          {/* Portfolio Value — primary metric */}
+      {/* Features */}
+      <section className="px-[var(--space-3)] pb-[var(--space-6)] grid gap-[var(--space-2)] md:grid-cols-3 max-w-[1100px]">
+        {FEATURES.map((f) => (
           <div
-            className="col-span-1 flex flex-col gap-[8px] p-[20px]"
-            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
+            key={f.title}
+            className="bg-[var(--color-surface-1)] border border-[var(--color-border)] rounded-[var(--radius-panel)] p-[20px]"
           >
-            <span
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
-            >
-              Portfolio Value
-            </span>
-            {/* FIX: font-weight 600 (Söhne Kräftig) applied to hero metric value. */}
-            <span
-              className="font-[family-name:var(--font-display)]"
-              style={{ fontSize: "var(--text-metric)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
-            >
-              $0.00
-            </span>
-          </div>
-
-          {/* Open P&L */}
-          <div
-            className="flex flex-col gap-[8px] p-[20px]"
-            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
-          >
-            <span
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
-            >
-              Open P&amp;L
-            </span>
-            <span
-              className="font-[family-name:var(--font-display)]"
-              style={{ fontSize: "var(--text-3xl)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
-            >
-              $0.00
-            </span>
-          </div>
-
-          {/* Closed P&L */}
-          <div
-            className="flex flex-col gap-[8px] p-[20px]"
-            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
-          >
-            <span
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
-            >
-              Closed P&amp;L
-            </span>
-            <span
-              className="font-[family-name:var(--font-display)]"
-              style={{ fontSize: "var(--text-3xl)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
-            >
-              $0.00
-            </span>
-          </div>
-
-          {/* Total Return */}
-          <div
-            className="flex flex-col gap-[8px] p-[20px]"
-            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
-          >
-            <span
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}
-            >
-              Total Return
-            </span>
-            <span
-              className="font-[family-name:var(--font-display)]"
-              style={{ fontSize: "var(--text-3xl)", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.1 }}
-            >
-              0.00%
-            </span>
-          </div>
-        </motion.section>
-
-        {/* ── Live Signals ── */}
-        <motion.section
-          className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.05 }}
-          aria-label="Live signals"
-        >
-          <div className="flex items-center justify-between">
-            <h2
-              className="font-[family-name:var(--font-display)]"
-              style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
-            >
-              Live Signals
+            <h2 className="font-[family-name:var(--font-display)] text-[16px] font-[600] text-[var(--color-text-primary)] mb-[8px]">
+              {f.title}
             </h2>
-            <button
-              onClick={() => setContextOpen((v) => !v)}
-              style={{
-                borderRadius: "var(--radius-button)",
-                fontSize: "var(--text-xs)",
-                fontWeight: 500,
-                color: "var(--color-text-secondary)",
-                backgroundColor: "transparent",
-                border: "1px solid var(--color-border)",
-                padding: "4px 12px",
-                cursor: "pointer",
-              }}
-            >
-              {contextOpen ? "Hide Rationale" : "Signal Rationale"}
-            </button>
-          </div>
-
-          {/* Empty state */}
-          <div
-            className="flex items-center justify-center py-[48px]"
-            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}
-          >
-            <p
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
-            >
-              Scanning NASDAQ for opportunities.
+            <p className="font-[family-name:var(--font-body)] text-[13px] text-[var(--color-text-secondary)] leading-[1.6]">
+              {f.body}
             </p>
           </div>
-        </motion.section>
+        ))}
+      </section>
 
-        {/* ── Portfolio & Holdings ── */}
-        <motion.section
-          className="px-[24px] pb-[24px] flex flex-col gap-[12px] flex-shrink-0"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.1 }}
-          aria-label="Portfolio holdings"
-        >
-          <h2
-            className="font-[family-name:var(--font-display)]"
-            style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
-          >
-            Portfolio
-          </h2>
-          <div
-            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)", overflow: "hidden" }}
-          >
-            <table className="w-full" role="table">
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  {PORTFOLIO_HEADERS.map((h) => (
-                    <th
-                      key={h}
-                      className="px-[16px] py-[10px] text-left font-[family-name:var(--font-body)]"
-                      style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td
-                    colSpan={PORTFOLIO_HEADERS.length}
-                    className="px-[16px] py-[32px] text-center font-[family-name:var(--font-body)]"
-                    style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
-                  >
-                    No active positions.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </motion.section>
-
-        {/* ── Trade History ── */}
-        <motion.section
-          className="px-[24px] pb-[24px] flex flex-col gap-[12px]"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.15 }}
-          aria-label="Trade history"
-        >
-          <div className="flex items-center justify-between">
-            <h2
-              className="font-[family-name:var(--font-display)]"
-              style={{ fontSize: "var(--text-section-title)", fontWeight: 500, color: "var(--color-text-primary)" }}
-            >
-              Trade History
-            </h2>
-            <div className="flex items-center gap-[8px]">
-              <button
-                style={{
-                  borderRadius: "var(--radius-button)",
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 500,
-                  color: "var(--color-text-secondary)",
-                  backgroundColor: "transparent",
-                  border: "1px solid var(--color-border)",
-                  padding: "4px 12px",
-                  cursor: "pointer",
-                }}
-              >
-                View Audit Trail
-              </button>
-              <button
-                style={{
-                  borderRadius: "var(--radius-button)",
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 500,
-                  color: "var(--color-text-secondary)",
-                  backgroundColor: "transparent",
-                  border: "1px solid var(--color-border)",
-                  padding: "4px 12px",
-                  cursor: "pointer",
-                }}
-              >
-                Export CSV
-              </button>
-            </div>
-          </div>
-          {/* FIX: Headers now include "Status" and "Rationale" per Quinn's Section 6 spec. */}
-          <div
-            style={{ borderRadius: "var(--radius-panel)", backgroundColor: "var(--color-surface-1)", border: "1px solid var(--color-border)", overflow: "hidden" }}
-          >
-            <table className="w-full" role="table">
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  {HISTORY_HEADERS.map((h) => (
-                    <th
-                      key={h}
-                      className="px-[16px] py-[10px] text-left font-[family-name:var(--font-body)]"
-                      style={{ fontSize: "var(--text-xs)", fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td
-                    colSpan={HISTORY_HEADERS.length}
-                    className="px-[16px] py-[32px] text-center font-[family-name:var(--font-body)]"
-                    style={{ fontSize: "var(--text-base)", color: "var(--color-text-muted)" }}
-                  >
-                    No trade history.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Compliance disclaimers */}
-          <div className="flex flex-col gap-[4px] pt-[8px]">
-            <p
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
-            >
-              Market Mind is not a registered investment advisor. All trading involves risk.
-            </p>
-            <p
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
-            >
-              Past performance does not guarantee future results.
-            </p>
-            <p
-              className="font-[family-name:var(--font-body)]"
-              style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}
-            >
-              System will not exceed your defined investment cap.
-            </p>
-          </div>
-        </motion.section>
-      </main>
-
-      {/* ── Context Panel 320px collapsible ── */}
-      <AnimatePresence>
-        {contextOpen && (
-          <motion.aside
-            key="context-panel"
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 320, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            // FIX: ease-out cubic-bezier applied.
-            transition={{ duration: 0.2, ease: EASE_OUT }}
-            className="flex-shrink-0 overflow-hidden border-l border-[var(--color-border)] bg-[var(--color-surface-1)] flex flex-col"
-            aria-label="Signal rationale"
-          >
-            <div className="w-[320px] flex flex-col h-full">
-              <div className="px-[16px] py-[16px] border-b border-[var(--color-border)] flex items-center justify-between">
-                <h3
-                  className="font-[family-name:var(--font-display)]"
-                  style={{ fontSize: "var(--text-lg)", fontWeight: 500, color: "var(--color-text-primary)" }}
-                >
-                  Signal Rationale
-                </h3>
-                <button
-                  onClick={() => setContextOpen(false)}
-                  style={{
-                    borderRadius: "var(--radius-button)",
-                    fontSize: "var(--text-xs)",
-                    color: "var(--color-text-muted)",
-                    backgroundColor: "transparent",
-                    border: "none",
-                    padding: "4px 8px",
-                    cursor: "pointer",
-                  }}
-                  aria-label="Close signal rationale panel"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="flex-1 flex items-center justify-center px-[16px]">
-                <p
-                  className="text-center font-[family-name:var(--font-body)]"
-                  style={{ fontSize: "var(--text-rationale)", color: "var(--color-text-muted)", lineHeight: 1.6 }}
-                >
-                  Scanning NASDAQ for opportunities.
-                </p>
-              </div>
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
-    </div>
+      {/* Disclaimer */}
+      <footer className="mt-auto px-[var(--space-3)] py-[var(--space-2)] border-t border-[var(--color-border)]">
+        <p className="font-[family-name:var(--font-body)] text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[1.6]">
+          Market Mind is not a registered investment advisor. All trading involves
+          risk. Past performance does not guarantee future results. Portfolios on
+          Market Mind are simulated: market prices are real, funds are not.
+        </p>
+      </footer>
+    </main>
   );
 }
