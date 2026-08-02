@@ -1,141 +1,136 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+"use client";
 
-interface Position {
-  ticker: string;
-  quantity: number;
-  avgPrice: number;
-  currentPrice: number;
-  marketValue: number;
-  pnl: number;
-}
+import React from "react";
+import { usePortfolio } from "@/lib/hooks/usePortfolio";
+import { Provenance, fmtMoney } from "@/components/ui/provenance";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TradeTicket } from "@/components/ui/trade-ticket";
 
-const EmptyState = () => (
-  <div className="flex flex-col items-center justify-center py-[var(--space-6)] text-center">
-    <svg
-      width="40"
-      height="40"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--color-text-secondary)"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="mb-[var(--space-2)]"
-    >
-      <path d="M3 3v18h18" />
-      <path d="m19 9-5 5-4-4-3 3" />
-    </svg>
-    <p className="font-[family-name:var(--font-display)] text-[16px] font-medium text-[var(--color-text-secondary)]">
-      No active positions.
-    </p>
-  </div>
-);
+const HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "P&L", "Value", "Price Source"];
 
-function formatCurrency(n: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(n);
-}
-
-// Table headers per Quinn's copy spec: Ticker, Position, Avg Price, Current Price, P&L, Value
-const HEADERS = ["Ticker", "Position", "Avg Price", "Current Price", "P&L", "Value"];
-
-export default async function PortfolioPage() {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/login");
-  }
-
-  let positions: Position[] = [];
-  try {
-    const { data: dbPositions } = await supabase
-      .from("positions")
-      .select("*")
-      .eq("user_id", user.id);
-
-    positions = (dbPositions || []).map((pos) => {
-      const currentPrice = pos.current_price || pos.avg_cost || 0;
-      const marketValue = pos.quantity * currentPrice;
-      const costBasis = pos.quantity * (pos.avg_cost || 0);
-      const pnl = marketValue - costBasis;
-      return {
-        ticker: pos.symbol,
-        quantity: pos.quantity,
-        avgPrice: pos.avg_cost || 0,
-        currentPrice,
-        marketValue,
-        pnl,
-      };
-    });
-  } catch {
-    // show empty state on fetch error — prevents 500
-  }
+export default function PortfolioPage() {
+  const { holdings, cash, totals, loading, error, refetch } = usePortfolio();
 
   return (
     <main className="flex flex-col w-full min-h-screen bg-[var(--color-canvas)]">
-      <header className="flex items-center h-[64px] px-[var(--space-3)] border-b border-[var(--color-border)]">
+      <header className="flex items-center justify-between h-[64px] px-[var(--space-3)] border-b border-[var(--color-border)]">
         <h1 className="font-[family-name:var(--font-display)] text-[var(--text-section-title)] font-medium text-[var(--color-text-primary)]">
           Portfolio
         </h1>
+        <span className="font-[family-name:var(--font-body)] text-[11px] text-[var(--color-text-muted)]">
+          Simulated portfolio — real market prices, simulated funds.
+        </span>
       </header>
-      <section className="flex-1 overflow-auto">
-        {positions.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <table className="w-full border-collapse text-left">
+
+      {error && (
+        <p
+          role="alert"
+          className="px-[var(--space-3)] pt-[var(--space-2)] font-[family-name:var(--font-body)] text-[13px]"
+          style={{ color: "var(--color-loss)" }}
+        >
+          Action failed. Try again. <span className="text-[11px] opacity-80">({error})</span>
+        </p>
+      )}
+
+      <section className="p-[var(--space-3)] flex flex-col gap-[var(--space-2)]">
+        <TradeTicket onExecuted={refetch} />
+
+        {!loading && !error && (
+          <p className="font-[family-name:var(--font-body)] text-[13px] text-[var(--color-text-secondary)]">
+            Cash {fmtMoney(cash)}
+            {totals && <> · Market value {fmtMoney(totals.marketValue)}</>}
+            {totals?.partial && (
+              <span style={{ color: "var(--color-alert)" }}>
+                {" "}· some holdings excluded from totals (price unavailable)
+              </span>
+            )}
+          </p>
+        )}
+
+        <div className="bg-[var(--color-surface-1)] border border-[var(--color-border)] rounded-[var(--radius-panel)] overflow-x-auto">
+          <table className="w-full text-left">
             <thead>
               <tr>
-                {HEADERS.map((header) => (
+                {HEADERS.map((h) => (
                   <th
-                    key={header}
+                    key={h}
                     className="px-[12px] py-[8px] text-[11px] font-normal uppercase tracking-[0.08em] text-[var(--color-text-secondary)] border-b border-[var(--color-border)]"
                   >
-                    {header}
+                    {h}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {positions.map((pos) => {
-                const pnlColor =
-                  pos.pnl >= 0
-                    ? "text-[var(--color-gain)]"
-                    : "text-[var(--color-loss)]";
-                return (
-                  <tr
-                    key={pos.ticker}
-                    className="h-[44px] border-b border-[var(--color-border)] hover:bg-[var(--color-surface-2)] transition-colors cursor-default"
-                  >
-                    <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-ticker)] font-[500] text-[var(--color-text-primary)] [font-feature-settings:'tnum']">
-                      {pos.ticker}
-                    </td>
-                    <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] text-[var(--color-text-primary)] [font-feature-settings:'tnum']">
-                      {pos.quantity}
-                    </td>
-                    <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] text-[var(--color-text-primary)] [font-feature-settings:'tnum']">
-                      {formatCurrency(pos.avgPrice)}
-                    </td>
-                    <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] text-[var(--color-text-primary)] [font-feature-settings:'tnum']">
-                      {formatCurrency(pos.currentPrice)}
-                    </td>
-                    <td className={`px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] [font-feature-settings:'tnum'] ${pnlColor}`}>
-                      {formatCurrency(pos.pnl)}
-                    </td>
-                    <td className="px-[12px] font-[family-name:var(--font-body)] text-[var(--text-base)] text-[var(--color-text-primary)] [font-feature-settings:'tnum']">
-                      {formatCurrency(pos.marketValue)}
-                    </td>
+              {loading &&
+                [0, 1, 2].map((i) => (
+                  <tr key={i}>
+                    {HEADERS.map((h) => (
+                      <td key={h} className="px-[12px] py-[10px]">
+                        <Skeleton height="14px" />
+                      </td>
+                    ))}
                   </tr>
-                );
-              })}
+                ))}
+              {!loading &&
+                holdings.map((h) => {
+                  const pnlColor =
+                    h.openPnl == null
+                      ? "var(--color-text-muted)"
+                      : h.openPnl >= 0
+                      ? "var(--color-gain)"
+                      : "var(--color-loss)";
+                  return (
+                    <tr key={h.symbol} className="border-b border-[var(--color-border)] last:border-b-0">
+                      <td className="px-[12px] py-[10px] font-[family-name:var(--font-body)] text-[var(--text-ticker)] font-[500] text-[var(--color-text-primary)] [font-feature-settings:'tnum']">
+                        {h.symbol}
+                      </td>
+                      <td className="px-[12px] py-[10px] font-[family-name:var(--font-body)] text-[13px] text-[var(--color-text-secondary)]">
+                        {h.quantity}
+                      </td>
+                      <td className="px-[12px] py-[10px] font-[family-name:var(--font-body)] text-[13px] text-[var(--color-text-secondary)]">
+                        {fmtMoney(h.avgCost)}
+                      </td>
+                      <td className="px-[12px] py-[10px] font-[family-name:var(--font-body)] text-[13px] text-[var(--color-text-primary)]">
+                        {h.price != null ? (
+                          fmtMoney(h.price)
+                        ) : (
+                          <span style={{ color: "var(--color-loss)" }} title={h.priceError}>
+                            unavailable
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-[12px] py-[10px] font-[family-name:var(--font-body)] text-[13px]" style={{ color: pnlColor }}>
+                        {h.openPnl != null ? fmtMoney(h.openPnl) : "—"}
+                      </td>
+                      <td className="px-[12px] py-[10px] font-[family-name:var(--font-body)] text-[13px] text-[var(--color-text-primary)]">
+                        {h.marketValue != null ? fmtMoney(h.marketValue) : "excluded"}
+                      </td>
+                      <td className="px-[12px] py-[10px]">
+                        {h.price != null ? (
+                          <Provenance source={h.priceSource} asOf={h.priceAsOf} freshness={h.freshness} />
+                        ) : (
+                          <span className="text-[11px] font-[family-name:var(--font-body)]" style={{ color: "var(--color-loss)" }}>
+                            {h.priceError || "quote failed"}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              {!loading && !error && holdings.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={HEADERS.length}
+                    className="px-[12px] py-[24px] text-center font-[family-name:var(--font-body)] text-[13px] text-[var(--color-text-muted)]"
+                  >
+                    No active positions.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
-        )}
+        </div>
       </section>
     </main>
   );
