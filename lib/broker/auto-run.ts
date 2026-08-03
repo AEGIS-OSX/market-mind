@@ -143,8 +143,11 @@ async function autoRunAccount(
 
   for (const symbol of symbols) {
     let outcome;
+    let barsMeta = "";
     try {
       const bars = await getDailyBars(symbol);
+      // Settled sessions only; an in-progress day is never an SMA input.
+      barsMeta = bars.settledThrough;
       outcome = computeSignal(bars.bars);
     } catch (e) {
       result.evaluated.push({ symbol, error: e instanceof Error ? e.message : String(e) });
@@ -156,6 +159,7 @@ async function autoRunAccount(
     }
     result.evaluated.push({
       symbol,
+      settledThrough: barsMeta,
       action: outcome.action,
       sma20: outcome.sma20,
       sma50: outcome.sma50,

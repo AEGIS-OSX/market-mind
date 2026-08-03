@@ -28,6 +28,8 @@ export async function GET() {
           source: series.source,
           fetchedAt: series.fetchedAt,
           stale: series.stale,
+          settledThrough: series.settledThrough,
+          droppedUnsettled: series.droppedUnsettled,
         };
       } catch (e) {
         return {
