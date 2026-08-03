@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useState } from "react";
 interface BrokerState {
   mode: string;
   killSwitchActive: boolean;
+  autonomousEnabled: boolean;
   liveEnabled: boolean;
   limits: Record<string, number | null>;
   account: Record<string, unknown> | null;
@@ -17,6 +18,24 @@ interface BrokerState {
   orders: Array<Record<string, unknown>>;
   positions: Array<Record<string, unknown>>;
   intents: Array<Record<string, unknown>>;
+}
+
+// Bot-placed and human-placed orders must never look the same. A trader
+// scanning this list needs to know at a glance which ones they did not do.
+function OriginBadge({ origin }: { origin: string }) {
+  const bot = origin === "autonomous";
+  return (
+    <span
+      className="px-[7px] py-[2px] rounded-[4px] text-[10px] font-[family-name:var(--font-body)] font-[600] uppercase tracking-[0.06em] whitespace-nowrap"
+      style={
+        bot
+          ? { backgroundColor: "var(--color-accent)", color: "var(--color-accent-ink)" }
+          : { backgroundColor: "var(--color-surface-3)", color: "var(--color-text-secondary)" }
+      }
+    >
+      {bot ? "BOT" : origin === "human" ? "HUMAN" : origin}
+    </span>
+  );
 }
 
 const money = (v: unknown) =>
@@ -88,6 +107,17 @@ export default function BrokerPage() {
           style={{ backgroundColor: "var(--color-loss)", color: "var(--color-text-primary)" }}
         >
           KILL SWITCH ACTIVE — all broker trading is halted for this account.
+        </p>
+      )}
+
+      {state?.autonomousEnabled && (
+        <p
+          className="mx-[var(--space-3)] mt-[var(--space-2)] px-[14px] py-[10px] rounded-[var(--radius-panel)] font-[family-name:var(--font-body)] text-[13px] border"
+          style={{ borderColor: "var(--color-accent)", color: "var(--color-text-primary)" }}
+        >
+          <strong>Autonomous trading is ON.</strong> Orders marked{" "}
+          <span className="font-[600]" style={{ color: "var(--color-accent)" }}>BOT</span> below were
+          placed by the SMA 20/50 crossover strategy on a schedule, with no human click.
         </p>
       )}
 
@@ -165,7 +195,7 @@ export default function BrokerPage() {
                 <table className="w-full text-left font-[family-name:var(--font-body)] text-[13px] [font-feature-settings:'tnum']">
                   <thead>
                     <tr className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
-                      <th className="py-[6px] pr-[16px]">Submitted</th><th className="pr-[16px]">Ticker</th><th className="pr-[16px]">Side</th>
+                      <th className="py-[6px] pr-[16px]">Submitted</th><th className="pr-[16px]">Placed by</th><th className="pr-[16px]">Ticker</th><th className="pr-[16px]">Side</th>
                       <th className="pr-[16px]">Qty</th><th className="pr-[16px]">Filled</th><th className="pr-[16px]">Avg fill</th>
                       <th className="pr-[16px]">Status</th><th>Broker order id</th>
                     </tr>
@@ -174,6 +204,7 @@ export default function BrokerPage() {
                     {state.orders.map((o) => (
                       <tr key={String(o.broker_order_id)} className="border-t border-[var(--color-border)] text-[var(--color-text-primary)]">
                         <td className="py-[8px] pr-[16px] text-[12px] text-[var(--color-text-secondary)]">{o.submitted_at ? new Date(String(o.submitted_at)).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET" : "—"}</td>
+                        <td className="pr-[16px]"><OriginBadge origin={String(o.placed_by ?? "unknown")} /></td>
                         <td className="pr-[16px] font-[500]">{String(o.symbol)}</td>
                         <td className="pr-[16px] uppercase" style={{ color: o.side === "buy" ? "var(--color-gain)" : "var(--color-loss)" }}>{String(o.side)}</td>
                         <td className="pr-[16px]">{String(o.qty)}</td>
@@ -204,7 +235,7 @@ export default function BrokerPage() {
                 <table className="w-full text-left font-[family-name:var(--font-body)] text-[13px] [font-feature-settings:'tnum']">
                   <thead>
                     <tr className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
-                      <th className="py-[6px] pr-[16px]">Created</th><th className="pr-[16px]">Ticker</th><th className="pr-[16px]">Side</th>
+                      <th className="py-[6px] pr-[16px]">Created</th><th className="pr-[16px]">Placed by</th><th className="pr-[16px]">Ticker</th><th className="pr-[16px]">Side</th>
                       <th className="pr-[16px]">Qty</th><th className="pr-[16px]">Limit</th><th className="pr-[16px]">State</th><th>Error</th>
                     </tr>
                   </thead>
@@ -212,6 +243,7 @@ export default function BrokerPage() {
                     {state.intents.map((i) => (
                       <tr key={String(i.client_order_id)} className="border-t border-[var(--color-border)] text-[var(--color-text-primary)]">
                         <td className="py-[8px] pr-[16px] text-[12px] text-[var(--color-text-secondary)]">{new Date(String(i.created_at)).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} ET</td>
+                        <td className="pr-[16px]"><OriginBadge origin={String(i.placed_by ?? "human")} /></td>
                         <td className="pr-[16px] font-[500]">{String(i.symbol)}</td>
                         <td className="pr-[16px] uppercase">{String(i.side)}</td>
                         <td className="pr-[16px]">{String(i.qty)}</td>

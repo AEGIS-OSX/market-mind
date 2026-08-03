@@ -32,7 +32,7 @@ export async function GET() {
         .eq("user_id", user.id),
       supabase
         .from("order_intents")
-        .select("client_order_id, symbol, side, qty, limit_price, state, broker_order_id, last_error, created_at")
+        .select("client_order_id, symbol, side, qty, limit_price, state, broker_order_id, last_error, created_at, placed_by, dedupe_key")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(20),
@@ -59,9 +59,21 @@ export async function GET() {
     }
   }
 
+  // Attribute each broker order to whoever created its intent, so the UI can
+  // separate bot-placed from human-placed rather than showing one flat list.
+  const placedByFor = new Map<string, string>();
+  for (const i of intents || []) {
+    if (i.client_order_id) placedByFor.set(String(i.client_order_id), String(i.placed_by ?? "human"));
+  }
+  const ordersWithOrigin = (orders || []).map((o) => ({
+    ...o,
+    placed_by: placedByFor.get(String(o.client_order_id)) ?? "unknown",
+  }));
+
   return NextResponse.json({
     mode: config?.mode ?? "sim",
     killSwitchActive: config?.kill_switch_active ?? false,
+    autonomousEnabled: config?.autonomous_enabled ?? false,
     liveEnabled: config?.live_enabled ?? false,
     limits: {
       max_order_notional: config?.max_order_notional ?? null,
@@ -74,7 +86,7 @@ export async function GET() {
     },
     account,
     accountError,
-    orders: orders || [],
+    orders: ordersWithOrigin,
     positions: positions || [],
     intents: intents || [],
   });
