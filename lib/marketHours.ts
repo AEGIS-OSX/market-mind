@@ -118,3 +118,46 @@ export function getMarketStatus(now: Date): MarketStatus {
 
   return { open, state: open ? "open" : "closed", label, earlyClose, etTime: et.display };
 }
+
+/**
+ * The most recent calendar date whose regular session was COMPLETE at
+ * `asOf` -- the newest daily bar that can be trusted as a settled close.
+ *
+ * A daily bar for a session still in progress carries whatever the price
+ * happened to be at the moment it was captured, so feeding it to an SMA makes
+ * the signal depend on what time the data was fetched. Today's bar counts
+ * only once today's session has actually ended.
+ *
+ * Correct outside a live session too, because it reuses the same holiday and
+ * early-close tables as getMarketStatus:
+ *   - during the session      -> yesterday (today is still forming)
+ *   - premarket               -> yesterday (today has not opened)
+ *   - after the close         -> today (the session completed)
+ *   - after an early close    -> today, from 13:00 ET
+ *   - weekend / full holiday  -> yesterday, since today is not a session
+ *
+ * Returns a calendar date, which is only an upper bound: no bar exists for a
+ * non-trading day, so `date <= cutoff` still keeps everything through the
+ * last real session.
+ */
+export function settledThroughDate(asOf: Date): string {
+  const et = toEtParts(asOf);
+  const isWeekend = et.weekday === 0 || et.weekday === 6;
+  const isHoliday = HOLIDAYS.has(et.date);
+  const closeMin = EARLY_CLOSES.has(et.date) ? EARLY_CLOSE_MIN : CLOSE_MIN;
+  const todaysSessionComplete = !isWeekend && !isHoliday && et.minutes >= closeMin;
+  if (todaysSessionComplete) return et.date;
+
+  // Previous calendar day, computed in UTC on the ET date string so it cannot
+  // be shifted by the local timezone of whatever machine is running this.
+  const [y, m, d] = et.date.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d));
+  prev.setUTCDate(prev.getUTCDate() - 1);
+  return prev.toISOString().slice(0, 10);
+}
+
+/** Keep only bars whose session had completed at `asOf`. */
+export function settledBarsOnly<T extends { date: string }>(bars: T[], asOf: Date): T[] {
+  const cutoff = settledThroughDate(asOf);
+  return bars.filter((b) => b.date <= cutoff);
+}

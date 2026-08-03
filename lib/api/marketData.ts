@@ -1,5 +1,5 @@
 import "server-only";
-import { getMarketStatus } from "@/lib/marketHours";
+import { getMarketStatus, settledBarsOnly, settledThroughDate } from "@/lib/marketHours";
 import { getServiceClient } from "@/lib/api/serviceRole";
 
 // Provider-agnostic market data with a fallback chain and provenance on every
@@ -40,10 +40,15 @@ export interface DailyBar {
 
 export interface BarSeries {
   symbol: string;
+  /** SETTLED daily bars only -- a session still in progress is never included. */
   bars: DailyBar[];
   source: string;
   fetchedAt: string;
   stale: boolean;
+  /** Newest session date these bars are trusted through. */
+  settledThrough: string;
+  /** Bars dropped as unsettled at the moment they were captured. */
+  droppedUnsettled: number;
 }
 
 export class MarketDataError extends Error {
@@ -318,12 +323,19 @@ export async function getDailyBars(symbol: string): Promise<BarSeries> {
     }
   }
   if (cachedRow && Date.now() - new Date(cachedRow.fetched_at).getTime() < barsTtlMs()) {
+    // Settlement is judged at the moment the row was CAPTURED, not now. A bar
+    // snapshotted mid-session is a partial price forever after; the session
+    // closing later does not retroactively make that stored number the close.
+    const capturedAt = new Date(cachedRow.fetched_at);
+    const settled = settledBarsOnly(cachedRow.bars, capturedAt);
     return {
       symbol,
-      bars: cachedRow.bars,
+      bars: settled,
       source: cachedRow.source,
       fetchedAt: cachedRow.fetched_at,
       stale: false,
+      settledThrough: settledThroughDate(capturedAt),
+      droppedUnsettled: cachedRow.bars.length - settled.length,
     };
   }
 
@@ -331,27 +343,45 @@ export async function getDailyBars(symbol: string): Promise<BarSeries> {
   for (const provider of BAR_PROVIDERS) {
     try {
       const { bars, source } = await provider(symbol);
-      const fetchedAt = new Date().toISOString();
+      const capturedAt = new Date();
+      const fetchedAt = capturedAt.toISOString();
+      // Strip the in-progress session BEFORE caching, so a partial bar never
+      // enters the store and no later reader can mistake it for a close.
+      const settled = settledBarsOnly(bars, capturedAt);
       if (svc) {
         try {
-          await svc.from("bars_cache").upsert({ symbol, bars, source, fetched_at: fetchedAt }, { onConflict: "symbol" });
+          await svc
+            .from("bars_cache")
+            .upsert({ symbol, bars: settled, source, fetched_at: fetchedAt }, { onConflict: "symbol" });
         } catch {
           /* best-effort */
         }
       }
-      return { symbol, bars, source, fetchedAt, stale: false };
+      return {
+        symbol,
+        bars: settled,
+        source,
+        fetchedAt,
+        stale: false,
+        settledThrough: settledThroughDate(capturedAt),
+        droppedUnsettled: bars.length - settled.length,
+      };
     } catch (e) {
       reasons.push(e instanceof Error ? e.message : String(e));
     }
   }
 
   if (cachedRow) {
+    const capturedAt = new Date(cachedRow.fetched_at);
+    const settled = settledBarsOnly(cachedRow.bars, capturedAt);
     return {
       symbol,
-      bars: cachedRow.bars,
+      bars: settled,
       source: cachedRow.source,
       fetchedAt: cachedRow.fetched_at,
       stale: true,
+      settledThrough: settledThroughDate(capturedAt),
+      droppedUnsettled: cachedRow.bars.length - settled.length,
     };
   }
   throw new MarketDataError(symbol, reasons);
