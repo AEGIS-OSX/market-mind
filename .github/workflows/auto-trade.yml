@@ -1,0 +1,48 @@
+name: Autonomous paper trading
+
+# Every 10 minutes through the US regular session. 14:00-19:50 UTC is
+# 10:00-15:50 ET during EDT -- deliberately starting after the open and
+# finishing before the close, so nothing is decided on the opening auction or
+# fired into the closing one.
+#
+# The cadence is NOT dependable. GitHub's scheduler is best-effort: the first
+# scheduled run of the reconciler arrived 73 minutes late, having silently
+# skipped fourteen slots. So every run must be safe to skip and safe to
+# repeat. The endpoint reconciles before it decides, re-checks every gate, and
+# dedupes on a UNIQUE index -- a burst of late runs places one order per
+# signal, not one per run.
+on:
+  schedule:
+    - cron: '*/10 14-19 * * 1-5'
+  workflow_dispatch:
+
+# Two passes at once would contend on the per-user order lock and waste the
+# window. Let the one in flight finish.
+concurrency:
+  group: auto-trade
+  cancel-in-progress: false
+
+jobs:
+  auto-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/broker/auto-run
+        env:
+          RECONCILE_SECRET: ${{ secrets.RECONCILE_SECRET }}
+        run: |
+          if [ -z "$RECONCILE_SECRET" ]; then
+            echo "RECONCILE_SECRET is not set in repo secrets"
+            exit 1
+          fi
+          code=$(curl -sS -o response.json -w '%{http_code}' \
+            --max-time 120 \
+            -X POST 'https://market-mind-umber.vercel.app/api/broker/auto-run' \
+            -H "x-reconcile-secret: $RECONCILE_SECRET" \
+            -H 'content-type: application/json')
+          echo "HTTP $code"
+          cat response.json
+          echo
+          if [ "$code" != "200" ]; then
+            echo "auto-run failed"
+            exit 1
+          fi

@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "crypto";
 import { getServiceClient } from "@/lib/api/serviceRole";
 import { preflight, type BrokerMode } from "@/lib/broker/preflight";
+import { withUserOrderLock } from "@/lib/broker/order-lock";
 import {
   resolveAlpacaClient,
   AlpacaHttpError,
@@ -39,6 +40,15 @@ export interface SubmitOrderInput {
   qty: number;
   limitPrice: number;
   mode: BrokerMode;
+  /**
+   * Deterministic per-signal key for autonomous orders. A UNIQUE INDEX on
+   * (user_id, dedupe_key) is what actually prevents a repeated cron run from
+   * acting on the same signal twice -- not a check in this file, which two
+   * concurrent runs could both pass. NULL for human orders.
+   */
+  dedupeKey?: string;
+  /** "human" or "autonomous". Recorded so the UI can tell them apart. */
+  placedBy?: string;
 }
 
 export type SubmitOutcome =
@@ -147,7 +157,20 @@ async function audit(userId: string, event: string, detail: Record<string, unkno
   }
 }
 
+/**
+ * Serialized entry point. Everything that reads broker state and then acts on
+ * it runs inside the per-user lock, so two concurrent requests cannot both
+ * pass a limit that should admit one.
+ */
 export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOutcome> {
+  const locked = await withUserOrderLock(input.userId, () => submitOrderSerialized(input));
+  if (!locked.ok) {
+    return { status: 409, body: { placed: false, error: locked.reason } };
+  }
+  return locked.value;
+}
+
+async function submitOrderSerialized(input: SubmitOrderInput): Promise<SubmitOutcome> {
   const svc = getServiceClient();
   if (!svc) {
     return {
@@ -198,8 +221,24 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOutcom
     qty: input.qty,
     limit_price: input.limitPrice,
     state: "intent_created" satisfies IntentState,
+    dedupe_key: input.dedupeKey ?? null,
+    placed_by: input.placedBy ?? "human",
   });
   if (intentErr) {
+    // 23505 on the dedupe index: this exact signal already has an intent.
+    // The database refused the duplicate, which is the point -- two runs
+    // racing here cannot both get past it.
+    if (intentErr.code === "23505") {
+      return {
+        status: 409,
+        body: {
+          placed: false,
+          duplicate: true,
+          dedupeKey: input.dedupeKey,
+          message: `An order intent already exists for ${input.dedupeKey}. This signal has already been acted on; nothing was sent.`,
+        },
+      };
+    }
     return { status: 503, body: { error: `Could not record order intent: ${intentErr.message}. Nothing was sent.` } };
   }
 

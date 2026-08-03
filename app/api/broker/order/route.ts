@@ -6,6 +6,9 @@ import { submitOrder, syncBrokerPositions } from "@/lib/broker/submit-order";
 import { resolveAlpacaClient } from "@/lib/broker/alpaca";
 
 export const dynamic = "force-dynamic";
+// The per-user order lock can make a request wait for one already in flight.
+// Vercel's 10s default would cut that short and look like a broker timeout.
+export const maxDuration = 60;
 
 // POST /api/broker/order  { symbol, side, qty }
 //
