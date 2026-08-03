@@ -123,3 +123,39 @@ export async function reconcile(
   out.positions = positions.length;
   return out;
 }
+
+/**
+ * Reconcile every non-sim account. This is what the scheduled job calls:
+ * there is no session behind a cron, so it works from broker_config rather
+ * than from a logged-in user. Accounts whose configured mode disagrees with
+ * the server's broker connection are skipped rather than reconciled against
+ * the wrong venue.
+ */
+export async function reconcileAllAccounts(): Promise<{
+  accounts: number;
+  skipped: number;
+  results: Array<Record<string, unknown>>;
+}> {
+  const svc = getServiceClient();
+  const out = { accounts: 0, skipped: 0, results: [] as Array<Record<string, unknown>> };
+  if (!svc) return out;
+
+  const { client } = (await import("@/lib/broker/alpaca")).resolveAlpacaClient();
+  if (!client) return out;
+
+  const { data: configs } = await svc
+    .from("broker_config")
+    .select("user_id, mode")
+    .neq("mode", "sim");
+
+  for (const cfg of configs || []) {
+    if (cfg.mode !== client.mode) {
+      out.skipped++;
+      continue;
+    }
+    const r = await reconcile(cfg.user_id, cfg.mode, client);
+    out.accounts++;
+    out.results.push({ user_id: cfg.user_id, mode: cfg.mode, ...r });
+  }
+  return out;
+}

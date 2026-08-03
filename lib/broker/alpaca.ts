@@ -76,6 +76,16 @@ export class AlpacaClient {
     path: string,
     body?: unknown
   ): Promise<T> {
+    // TEST-ONLY FAULT INJECTION. Absent from production; set only on a
+    // preview deployment to prove the outage path. It can only cause a
+    // failure -- it cannot redirect a request anywhere, which is why this is
+    // a flag rather than a base-URL override.
+    if (process.env.ALPACA_FAULT_INJECT === "transport" && method === "POST") {
+      throw new AlpacaTransportError(
+        "injected transport fault (ALPACA_FAULT_INJECT=transport)"
+      );
+    }
+
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}${path}`, {
@@ -137,6 +147,23 @@ export class AlpacaClient {
     return this.request<Record<string, unknown>[]>(
       "GET",
       "/v2/orders?status=open&nested=false"
+    );
+  }
+
+  /**
+   * Order history straight from the broker. The rate limits are counted from
+   * this, never from our own rows -- our rows can be missing an order the
+   * broker accepted, which is exactly the case a rate limit must not miss.
+   */
+  getOrders(params: { status?: string; after?: string; until?: string; limit?: number } = {}) {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined) q.set(k, String(v));
+    }
+    const s = q.toString();
+    return this.request<Record<string, unknown>[]>(
+      "GET",
+      `/v2/orders${s ? `?${s}` : ""}`
     );
   }
 

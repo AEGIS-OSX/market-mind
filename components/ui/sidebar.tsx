@@ -10,6 +10,9 @@ const NAV_LINKS = [
   { name: "Signals", href: "/dashboard/signals" },
   { name: "Portfolio", href: "/dashboard/portfolio" },
   { name: "Trade History", href: "/dashboard/history" },
+  // Real broker account. Listed apart from the simulated surfaces above so it
+  // is not read as more of the same.
+  { name: "Broker (real)", href: "/dashboard/broker" },
   { name: "Settings", href: "/dashboard/settings" },
 ];
 

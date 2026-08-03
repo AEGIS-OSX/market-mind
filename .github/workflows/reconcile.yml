@@ -1,0 +1,43 @@
+name: Reconcile broker
+
+# Vercel Hobby caps cron at one invocation a day, which is useless for keeping
+# a broker mirror current. This runs every 5 minutes through the US session
+# instead. Times are UTC: 13:00-21:00 UTC covers 09:00-17:00 ET during EDT,
+# which brackets the 09:30-16:00 regular session with room either side.
+on:
+  schedule:
+    - cron: '*/5 13-21 * * 1-5'
+  workflow_dispatch:
+
+# A late run is useless and a pile-up is worse: if one is already going, let
+# it finish rather than stacking reconciles on the same account.
+concurrency:
+  group: reconcile-broker
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/broker/reconcile
+        env:
+          RECONCILE_SECRET: ${{ secrets.RECONCILE_SECRET }}
+        run: |
+          if [ -z "$RECONCILE_SECRET" ]; then
+            echo "RECONCILE_SECRET is not set in repo secrets"
+            exit 1
+          fi
+          code=$(curl -sS -o response.json -w '%{http_code}' \
+            -X POST 'https://market-mind-umber.vercel.app/api/broker/reconcile' \
+            -H "x-reconcile-secret: $RECONCILE_SECRET" \
+            -H 'content-type: application/json')
+          echo "HTTP $code"
+          cat response.json
+          echo
+          # A non-2xx means the mirror did not refresh. Fail loudly: a
+          # reconciler that fails quietly is worse than none, because the
+          # stale mirror still looks authoritative.
+          if [ "$code" != "200" ]; then
+            echo "reconcile failed"
+            exit 1
+          fi
