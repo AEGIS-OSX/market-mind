@@ -1,5 +1,6 @@
 import "server-only";
 import { getServiceClient } from "@/lib/api/serviceRole";
+import { resolveAlpacaClient } from "@/lib/broker/alpaca";
 
 // Broker preflight. This is the gate every order must pass BEFORE anything is
 // sent to a broker. There is no broker client in this codebase yet and this
@@ -59,6 +60,12 @@ export interface PreflightInput {
   side: "buy" | "sell";
   qty: number;
   mode: BrokerMode;
+  /**
+   * The price the order would actually be worked at. Required in paper/live:
+   * every notional limit is measured against it, and a limit measured against
+   * nothing is not a limit.
+   */
+  limitPrice?: number;
 }
 
 export type PreflightVerdict =
@@ -77,6 +84,14 @@ export type PreflightRefusalCode =
   | "symbol_not_allowed"
   | "allowlist_unreadable"
   | "limits_not_configured"
+  | "no_reference_price"
+  | "broker_state_unavailable"
+  | "max_order_notional"
+  | "max_position_notional"
+  | "max_position_pct_equity"
+  | "max_daily_loss"
+  | "max_orders_per_day"
+  | "max_orders_per_minute"
   | "invalid_input"
   | "internal_error";
 
@@ -274,5 +289,189 @@ export async function preflight(input: PreflightInput): Promise<PreflightVerdict
   }
   checks.push("limits_configured");
 
+  // ------------------------------------------------------------------
+  // Numeric enforcement. Up to here the limits only had to EXIST; from
+  // here they are actually compared against the order and the account.
+  //
+  // Every input below is fetched fresh from the broker at check time. None
+  // of it is cached and none of it is read from our own tables: our mirror
+  // can be stale or missing an order the broker accepted, and a risk limit
+  // computed from a stale picture is not a risk limit.
+  // ------------------------------------------------------------------
+  const limitPrice = input.limitPrice;
+  if (limitPrice == null || !Number.isFinite(limitPrice) || limitPrice <= 0) {
+    return refuse(
+      input,
+      "no_reference_price",
+      "No reference price supplied, so order value cannot be measured against the limits. Refusing."
+    );
+  }
+
+  const orderNotional = input.qty * limitPrice;
+  if (orderNotional > Number(cfg.max_order_notional)) {
+    return refuse(
+      input,
+      "max_order_notional",
+      `Order value ${orderNotional.toFixed(2)} exceeds max_order_notional ${Number(cfg.max_order_notional).toFixed(2)}. Refusing.`
+    );
+  }
+  checks.push("max_order_notional");
+
+  // sim never reaches a broker, so there is no broker state to measure.
+  if (input.mode === "sim") {
+    return { allowed: true, code: "ok", mode: config.mode, checks };
+  }
+
+  const { client } = resolveAlpacaClient();
+  if (!client) {
+    return refuse(
+      input,
+      "broker_state_unavailable",
+      "Cannot reach the broker to read current positions, equity and order counts. Limits are unverifiable, so the order is refused."
+    );
+  }
+
+  let account: Record<string, unknown>;
+  let positions: Record<string, unknown>[];
+  let dayOrders: Record<string, unknown>[];
+  let minuteOrders: Record<string, unknown>[];
+  try {
+    const now = new Date();
+    [account, positions, dayOrders, minuteOrders] = await Promise.all([
+      client.getAccount(),
+      client.getPositions(),
+      client.getOrders({ status: "all", after: startOfEtDayIso(now), limit: 500 }),
+      client.getOrders({
+        status: "all",
+        after: new Date(now.getTime() - 60_000).toISOString(),
+        limit: 500,
+      }),
+    ]);
+  } catch (e) {
+    return refuse(
+      input,
+      "broker_state_unavailable",
+      `Could not read fresh broker state (${e instanceof Error ? e.message : String(e)}). Limits are unverifiable, so the order is refused.`
+    );
+  }
+
+  const equity = Number(account.equity);
+  const lastEquity = Number(account.last_equity);
+
+  // Resulting position, from FRESH broker positions -- not from our mirror.
+  const existing = positions.find((p) => String(p.symbol) === input.symbol);
+  const existingQty = existing ? Number(existing.qty) : 0;
+  const resultingQty =
+    input.side === "buy" ? existingQty + input.qty : existingQty - input.qty;
+  const resultingNotional = Math.abs(resultingQty) * limitPrice;
+
+  if (resultingNotional > Number(cfg.max_position_notional)) {
+    return refuse(
+      input,
+      "max_position_notional",
+      `Resulting ${input.symbol} position ${Math.abs(resultingQty)} x ${limitPrice} = ${resultingNotional.toFixed(2)} exceeds max_position_notional ${Number(cfg.max_position_notional).toFixed(2)}. Refusing.`
+    );
+  }
+  checks.push("max_position_notional");
+
+  if (!Number.isFinite(equity) || equity <= 0) {
+    return refuse(
+      input,
+      "broker_state_unavailable",
+      "Broker reported no usable equity, so position-vs-equity cannot be measured. Refusing."
+    );
+  }
+  const resultingPct = (resultingNotional / equity) * 100;
+  if (resultingPct > Number(cfg.max_position_pct_equity)) {
+    return refuse(
+      input,
+      "max_position_pct_equity",
+      `Resulting ${input.symbol} position would be ${resultingPct.toFixed(2)}% of equity ${equity.toFixed(2)}, exceeding max_position_pct_equity ${Number(cfg.max_position_pct_equity)}%. Refusing.`
+    );
+  }
+  checks.push("max_position_pct_equity");
+
+  // Daily loss. A breach is not just this order's problem -- the account is
+  // already down more than it is allowed to be, so trading stops entirely.
+  const dayPnl = equity - lastEquity;
+  if (Number.isFinite(lastEquity) && dayPnl <= -Number(cfg.max_daily_loss)) {
+    await tripKillSwitch(input.userId, dayPnl, Number(cfg.max_daily_loss));
+    return refuse(
+      input,
+      "max_daily_loss",
+      `Daily loss ${dayPnl.toFixed(2)} has reached max_daily_loss ${Number(cfg.max_daily_loss).toFixed(2)} (equity ${equity.toFixed(2)} vs last_equity ${lastEquity.toFixed(2)}). Kill switch tripped automatically; all trading halted. Refusing.`
+    );
+  }
+  checks.push("max_daily_loss");
+
+  if (dayOrders.length >= Number(cfg.max_orders_per_day)) {
+    return refuse(
+      input,
+      "max_orders_per_day",
+      `Broker shows ${dayOrders.length} orders today, at or above max_orders_per_day ${Number(cfg.max_orders_per_day)}. Refusing.`
+    );
+  }
+  checks.push("max_orders_per_day");
+
+  if (minuteOrders.length >= Number(cfg.max_orders_per_minute)) {
+    return refuse(
+      input,
+      "max_orders_per_minute",
+      `Broker shows ${minuteOrders.length} orders in the last 60 seconds, at or above max_orders_per_minute ${Number(cfg.max_orders_per_minute)}. Refusing.`
+    );
+  }
+  checks.push("max_orders_per_minute");
+
   return { allowed: true, code: "ok", mode: config.mode, checks };
+}
+
+/** Breaching the daily loss limit halts the account, not just the order. */
+async function tripKillSwitch(userId: string, dayPnl: number, limit: number): Promise<void> {
+  const svc = getServiceClient();
+  if (!svc) return;
+  try {
+    await svc
+      .from("broker_config")
+      .update({ kill_switch_active: true })
+      .eq("user_id", userId);
+    await svc.from("broker_audit_log").insert({
+      user_id: userId,
+      event: "kill_switch_auto_tripped",
+      detail: { reason: "max_daily_loss breached", day_pnl: dayPnl, max_daily_loss: limit },
+    });
+  } catch {
+    /* the refusal stands regardless */
+  }
+}
+
+/** Midnight of the current US/Eastern calendar day, as a UTC instant. */
+export function startOfEtDayIso(now: Date): string {
+  const d: Record<string, string> = {};
+  for (const p of new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now)) {
+    d[p.type] = p.value;
+  }
+  const naive = new Date(`${d.year}-${d.month}-${d.day}T00:00:00Z`);
+  for (const offsetH of [4, 5]) {
+    const cand = new Date(naive.getTime() + offsetH * 3600_000);
+    const c: Record<string, string> = {};
+    for (const p of new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      hour12: false,
+    }).formatToParts(cand)) {
+      c[p.type] = p.value;
+    }
+    if ((c.hour === "00" || c.hour === "24") && `${c.year}-${c.month}-${c.day}` === `${d.year}-${d.month}-${d.day}`) {
+      return cand.toISOString();
+    }
+  }
+  return new Date(naive.getTime() + 4 * 3600_000).toISOString();
 }

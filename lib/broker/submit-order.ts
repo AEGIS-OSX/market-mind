@@ -210,6 +210,9 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOutcom
     side: input.side,
     qty: input.qty,
     mode: input.mode,
+    // The price the order will actually be worked at, so every notional
+    // limit is measured against the real number rather than a guess.
+    limitPrice: input.limitPrice,
   });
   if (!verdict.allowed) {
     await setIntent(clientOrderId, {
