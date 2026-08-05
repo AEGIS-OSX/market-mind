@@ -10,6 +10,8 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
+import { EASE_OUT } from "@/lib/motion";
+
 export function Modal({ open, onClose, title, children }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
