@@ -10,6 +10,8 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
+import { EASE_OUT } from "@/lib/motion";
+
 export function Modal({ open, onClose, title, children }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
@@ -59,7 +61,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
             className="relative bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-[var(--radius-modal)] p-6 max-w-[480px] w-[90vw] z-10"
           >
             <div className="flex items-center justify-between mb-6">
